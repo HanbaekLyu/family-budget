@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Family Finance</title>
+<link rel="manifest" href="manifest.json">
+<style>
+  :root{
+    --bg:#f2f7f4; --bg2:#dff0e6; --panel:#ffffff; --border:#d3e3d8;
+    --text:#243830; --muted:#748b7e; --accent:#2e9e6b;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:linear-gradient(180deg,var(--bg2),var(--bg) 320px);color:var(--text);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;}
+  h1{font-size:26px;font-weight:800;margin:0 0 4px;}
+  .sub{color:var(--muted);font-size:14px;margin-bottom:28px;text-align:center;}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;width:100%;max-width:560px;}
+  a.card{display:block;text-decoration:none;color:var(--text);background:var(--panel);border:1px solid var(--border);
+    border-radius:16px;padding:24px;box-shadow:0 2px 8px rgba(40,90,60,.08);transition:transform .12s,border-color .12s;}
+  a.card:hover{transform:translateY(-2px);border-color:var(--accent);}
+  a.card .emoji{font-size:34px;}
+  a.card .title{font-size:18px;font-weight:750;margin:10px 0 4px;}
+  a.card .desc{font-size:13px;color:var(--muted);line-height:1.5;}
+  .foot{color:var(--muted);font-size:12px;margin-top:28px;text-align:center;}
+</style>
+</head>
+<body>
+  <h1>📊 Family Finance</h1>
+  <div class="sub">Shared budgeting &amp; spending tools</div>
+  <div class="cards">
+    <a class="card" href="budget-planner.html">
+      <div class="emoji">📊</div>
+      <div class="title">Budget Planner</div>
+      <div class="desc">Monthly plan, this-month tracking, 12-month history, and a coach — with automatic email→sheet spending import.</div>
+    </a>
+    <a class="card" href="credit-card-tracker.html">
+      <div class="emoji">💳</div>
+      <div class="title">Credit Card Tracker</div>
+      <div class="desc">Track balances, payments, and card spending across all your accounts.</div>
+    </a>
+  </div>
+  <div class="foot">Private family use · data synced securely</div>
+</body>
+</html>

@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Family Card & Benefits Tracker</title>
+<!-- Firebase (live sync). Safe to leave even if config below is blank = offline mode. -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
+<link rel="manifest" href="./manifest.json">
+<style>
+  :root {
+    /* pastel yellow, bright but soft */
+    --bg:#fdf7de; --bg2:#fbeeb8; --panel:#fffef9; --panel-2:#fef8dd; --border:#ece0a6;
+    --text:#463f24; --muted:#948b60; --accent:#e9b100; --accent-soft:#f6d557;
+    --green:#4a9e4d; --green-bg:#e7f4e2; --amber:#d98a1f; --red:#d64545;
+    --blue:#5b8bd0; --purple:#9b76c9;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:linear-gradient(180deg,var(--bg2),var(--bg) 240px); color:var(--text); line-height:1.5; min-height:100vh; }
+  header { padding:22px 28px 16px; display:flex; flex-wrap:wrap; align-items:center; gap:16px; justify-content:space-between; }
+  h1 { font-size:21px; margin:0; font-weight:750; }
+  .sub { color:var(--muted); font-size:13px; margin-top:2px; }
+  .wrap { max-width:1150px; margin:0 auto; padding:8px 28px 90px; }
+
+  /* alert banner */
+  .alert-bar { background:#fff6cf; border:1px solid var(--accent-soft); border-left:5px solid var(--amber);
+    border-radius:12px; padding:14px 16px; margin-bottom:18px; display:none; }
+  .alert-bar.show { display:block; }
+  .alert-bar h3 { margin:0 0 6px; font-size:14px; color:var(--amber); }
+  .alert-bar ul { margin:0; padding-left:20px; font-size:13px; }
+  .alert-bar li { margin:2px 0; }
+
+  .summary { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:20px; }
+  .stat { background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:15px; box-shadow:0 1px 3px rgba(180,150,40,.08); }
+  .stat .label { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.04em; font-weight:600; }
+  .stat .value { font-size:24px; font-weight:750; margin-top:4px; }
+  .stat .value.risk { color:var(--amber); }
+  .stat .hint { font-size:11px; color:var(--muted); margin-top:2px; }
+
+  .toolbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:18px; }
+  .seg { display:inline-flex; background:var(--panel); border:1px solid var(--border); border-radius:11px; padding:3px; box-shadow:0 1px 2px rgba(180,150,40,.08); }
+  .seg button { padding:8px 15px; border-radius:8px; cursor:pointer; font-size:13.5px; color:var(--muted); border:none; background:none; font-weight:600; }
+  .seg button.active { background:var(--accent); color:#fff; }
+  .spacer { flex:1; }
+  button.btn { background:var(--panel); color:var(--text); border:1px solid var(--border); border-radius:9px; padding:8px 14px; cursor:pointer; font-size:13px; font-weight:600; }
+  button.btn:hover { border-color:var(--accent); }
+  button.btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.btn.alert-btn.on { background:var(--green-bg); border-color:var(--green); color:var(--green); }
+
+  /* card view */
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:14px; margin-bottom:12px; overflow:hidden; box-shadow:0 1px 3px rgba(180,150,40,.08); }
+  .card-head { display:flex; align-items:center; gap:13px; padding:14px 16px; cursor:pointer; }
+  .card-head:hover { background:var(--panel-2); }
+  .chip { display:inline-block; padding:2px 10px; border-radius:20px; font-size:11px; font-weight:700; background:var(--panel-2); white-space:nowrap; }
+  .chip.Person1 { background:#e3edfb; color:var(--blue); }
+  .chip.Person2 { background:#efe7fa; color:var(--purple); }
+  .card-main { flex:1; min-width:0; }
+  .card-title { font-weight:700; font-size:15px; }
+  .card-sub { color:var(--muted); font-size:12px; }
+  .card-note { color:var(--amber); font-size:12px; font-style:italic; }
+  .fee { font-variant-numeric:tabular-nums; font-weight:750; font-size:15px; text-align:right; }
+  .fee.zero { color:var(--muted); font-weight:600; }
+  .due { font-size:12px; text-align:right; }
+  .due small { color:var(--muted); }
+  .due.soon { color:var(--amber); font-weight:700; }
+  .due.urgent { color:var(--red); font-weight:800; }
+  .caret { color:var(--muted); font-size:12px; transition:transform .15s; width:14px; text-align:center; }
+  .card.open-x .caret { transform:rotate(90deg); }
+  .pill { font-size:11px; font-weight:700; padding:2px 9px; border-radius:20px; background:var(--green-bg); color:var(--green); white-space:nowrap; }
+  .pill.none { background:var(--panel-2); color:var(--muted); }
+  .card-body { display:none; padding:4px 16px 16px; border-top:1px solid var(--border); }
+  .card.open-x .card-body { display:block; }
+
+  .ben { display:flex; align-items:flex-start; gap:11px; padding:9px 4px; border-bottom:1px dashed var(--border); }
+  .ben:last-child { border-bottom:none; }
+  .ben input[type=checkbox] { width:19px; height:19px; margin-top:2px; accent-color:var(--green); cursor:pointer; flex-shrink:0; }
+  .ben-main { flex:1; min-width:0; }
+  .ben-name { font-size:14px; font-weight:600; }
+  .ben-name.done { text-decoration:line-through; color:var(--muted); }
+  .ben-meta { font-size:12px; color:var(--muted); margin-top:1px; }
+  .cadence-tag { display:inline-block; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.03em; padding:1px 6px; border-radius:5px; background:var(--bg2); color:#8a6d1a; margin-left:6px; }
+  .ben-amt { font-variant-numeric:tabular-nums; font-weight:750; font-size:13px; color:var(--green); white-space:nowrap; }
+  .ben-actions { display:flex; gap:4px; }
+  .icon-btn { background:none; border:none; color:var(--muted); cursor:pointer; font-size:13px; padding:2px 5px; border-radius:6px; }
+  .icon-btn:hover { background:var(--bg2); color:var(--text); }
+  .body-tools { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .body-tools .btn { padding:6px 11px; font-size:12px; }
+  .worth-row { background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:14px 16px; margin-bottom:12px; box-shadow:0 1px 3px rgba(180,150,40,.08); }
+  .worth-head { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .worth-name { font-weight:700; font-size:15px; flex:1; }
+  .worth-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:10px; }
+  .worth-grid .wlabel { font-size:10px; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); font-weight:600; }
+  .worth-grid .wval { font-size:16px; font-weight:750; font-variant-numeric:tabular-nums; }
+  .worth-grid .wval.pos { color:var(--green); } .worth-grid .wval.neg { color:var(--red); } .worth-grid .wval.fee-neg { color:var(--red); }
+  .worth-note { font-size:12px; color:var(--muted); font-style:italic; margin-top:8px; line-height:1.5; }
+  .badge { display:inline-block; font-size:11px; font-weight:700; padding:2px 9px; border-radius:20px; }
+  .badge.good { background:rgba(63,158,77,.16); color:var(--green); }
+  .badge.warn { background:rgba(217,138,31,.16); color:var(--amber); }
+  .badge.bad { background:rgba(214,69,69,.14); color:var(--red); }
+  @media(max-width:600px){ .worth-grid{ grid-template-columns:repeat(2,1fr); } }
+  .notes-block, .todo-block { margin-top:12px; padding-top:10px; border-top:1px dashed var(--border); }
+  .notes-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); display:block; margin-bottom:5px; }
+  .notes-area { width:100%; min-height:52px; resize:vertical; background:var(--bg); border:1px solid var(--border); border-radius:9px; padding:8px 10px; color:var(--text); font-size:13px; font-family:inherit; }
+  .notes-area:focus { outline:none; border-color:var(--accent); }
+  .todo { display:flex; align-items:center; gap:9px; padding:5px 2px; font-size:13.5px; }
+  .todo input[type=checkbox] { width:17px; height:17px; accent-color:var(--green); cursor:pointer; }
+  .todo span { flex:1; }
+  .todo-done { text-decoration:line-through; color:var(--muted); }
+  .empty-ben { color:var(--muted); font-size:13px; padding:10px 4px; }
+
+  /* fee calendar + timeline groups */
+  .group { margin-bottom:22px; }
+  .group-head { font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:.05em; color:#8a6d1a;
+    padding:6px 4px; border-bottom:2px solid var(--accent-soft); margin-bottom:8px; display:flex; justify-content:space-between; }
+  .group-head .gsum { color:var(--muted); font-weight:700; }
+  .row { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:12px 15px; margin-bottom:8px;
+    display:flex; align-items:center; gap:13px; box-shadow:0 1px 2px rgba(180,150,40,.06); }
+  .row.urgent { border-left:5px solid var(--red); }
+  .row.soon { border-left:5px solid var(--amber); }
+  .row-main { flex:1; min-width:0; }
+  .row-title { font-weight:700; font-size:14px; }
+  .row-sub { color:var(--muted); font-size:12px; }
+  .row-right { text-align:right; }
+  .days { font-size:12px; font-weight:700; }
+  .days.urgent { color:var(--red); } .days.soon { color:var(--amber); }
+
+  /* modal */
+  .overlay { position:fixed; inset:0; background:rgba(70,55,10,.4); display:none; align-items:center; justify-content:center; z-index:50; padding:20px; }
+  .overlay.show { display:flex; }
+  .modal { background:var(--panel); border:1px solid var(--border); border-radius:16px; width:100%; max-width:470px; padding:24px; max-height:90vh; overflow-y:auto; box-shadow:0 12px 40px rgba(120,95,10,.25); }
+  .modal h2 { margin:0 0 18px; font-size:17px; }
+  .field { margin-bottom:14px; }
+  .field label { display:block; font-size:12px; color:var(--muted); margin-bottom:5px; text-transform:uppercase; letter-spacing:.03em; font-weight:600; }
+  .field input, .field select { width:100%; background:var(--bg); border:1px solid var(--border); border-radius:9px; padding:9px 11px; color:var(--text); font-size:14px; }
+  .field input:focus, .field select:focus { outline:none; border-color:var(--accent); }
+  .field-row { display:flex; gap:12px; }
+  .field-row .field { flex:1; }
+  .modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:8px; }
+  .footer-note { color:var(--muted); font-size:12px; margin-top:26px; text-align:center; line-height:1.7; }
+  a { color:var(--accent); }
+</style>
+</head>
+<body>
+<!-- Login gate (only shown when Firebase auth is configured) -->
+<div class="overlay" id="loginOverlay">
+  <div class="modal" style="max-width:400px;text-align:center;">
+    <div style="font-size:38px;margin-bottom:6px;">🍯</div>
+    <h2 style="margin-bottom:4px;">Family Card Tracker</h2>
+    <div class="sub" style="margin-bottom:18px;">Sign in to view the shared tracker</div>
+    <div class="field" style="text-align:left;"><label>Email</label><input id="lg_email" type="email" placeholder="you@example.com"></div>
+    <div class="field" style="text-align:left;"><label>Password</label><input id="lg_pass" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div id="lg_err" style="color:var(--red);font-size:13px;min-height:18px;margin-bottom:10px;"></div>
+    <button class="btn primary" style="width:100%;padding:11px;" onclick="doLogin()">Sign in</button>
+    <div class="footer-note" style="margin-top:16px;">Only the accounts you create in Firebase can sign in.<br>See SETUP-SYNC.md to add your family's logins.</div>
+  </div>
+</div>
+
+<header>
+  <div>
+    <h1>🍯 Family Card &amp; Benefits Tracker</h1>
+    <div class="sub">Annual fees, renewal dates &amp; recurring benefit credits — saved on this device</div>
+  </div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+    <span id="syncBadge" title="Sync status" style="font-size:12px;font-weight:600;padding:5px 10px;border-radius:20px;background:var(--panel-2);color:var(--muted);border:1px solid var(--border);">⚪ Offline</span>
+    <button class="btn alert-btn" id="alertBtn" onclick="toggleAlerts()">🔔 Enable alerts</button>
+    <button class="btn" onclick="exportData()">Export</button>
+    <button class="btn" onclick="document.getElementById('importFile').click()">Import</button>
+    <input type="file" id="importFile" accept="application/json" style="display:none" onchange="importData(event)">
+    <button class="btn primary" onclick="openCardModal()">+ Add card</button>
+    <button class="btn" id="logoutBtn" onclick="doLogout()" style="display:none;">Sign out</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="alert-bar" id="alertBar"></div>
+  <div class="summary" id="summary"></div>
+
+  <div class="toolbar">
+    <div class="seg" id="viewSeg">
+      <button data-v="fees">📅 Fee Calendar</button>
+      <button data-v="cards">💳 By Card</button>
+      <button data-v="timeline">⏳ By Timeline</button>
+      <button data-v="worth">⚖️ Worth It?</button>
+      <button data-v="travel">✈️ Travel</button>
+      <button data-v="advice">💡 Advice</button>
+    </div>
+    <div class="seg" id="ownerSeg"></div>
+    <div class="spacer"></div>
+    <button class="btn" id="expandBtn" onclick="expandAll(true)" style="display:none;">Expand all</button>
+    <button class="btn" id="collapseBtn" onclick="expandAll(false)" style="display:none;">Collapse all</button>
+    <a class="btn" href="./budget-planner.html" title="Open the budget planner">💰 Budget →</a>
+  </div>
+
+  <div id="main"></div>
+
+  <div class="footer-note">
+    Data is stored in this browser only (localStorage) and persists after you close &amp; reopen. Use <b>Export</b> to back up.<br>
+    Benefit checkboxes reset automatically each period. Alerts show while this page is open; verify all fees &amp; credits with your issuer.
+  </div>
+</div>
+
+<!-- Card modal -->
+<div class="overlay" id="cardOverlay">
+  <div class="modal">
+    <h2 id="cardModalTitle">Add card</h2>
+    <input type="hidden" id="c_id">
+    <div class="field"><label>Owner</label><select id="c_owner"></select></div>
+    <div class="field"><label>Card name</label><input id="c_name" placeholder="e.g. Sapphire Reserve"></div>
+    <div class="field"><label>Issuer</label><input id="c_issuer" placeholder="e.g. Chase"></div>
+    <div class="field-row">
+      <div class="field"><label>Open year</label><input id="c_year" type="number" min="2000" max="2100" placeholder="2024"></div>
+      <div class="field"><label>Open month</label><input id="c_month" type="number" min="1" max="12" placeholder="6"></div>
+      <div class="field"><label>Annual fee ($)</label><input id="c_fee" type="number" min="0" step="1" placeholder="0"></div>
+    </div>
+    <div class="field"><label>Note (optional)</label><input id="c_note" placeholder="e.g. downgraded from Sapphire Preferred"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeCardModal()">Cancel</button>
+      <button class="btn primary" onclick="saveCard()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Benefit modal -->
+<div class="overlay" id="benOverlay">
+  <div class="modal">
+    <h2 id="benModalTitle">Add benefit</h2>
+    <input type="hidden" id="b_cardId"><input type="hidden" id="b_idx">
+    <div class="field"><label>Benefit name</label><input id="b_name" placeholder="e.g. Lululemon credit"></div>
+    <div class="field-row">
+      <div class="field"><label>Amount per period ($)</label><input id="b_amount" type="number" min="0" step="1" placeholder="75"></div>
+      <div class="field"><label>Resets</label>
+        <select id="b_cadence">
+          <option value="monthly">Monthly</option>
+          <option value="quarterly">Quarterly</option>
+          <option value="semiannual">Semi-annual (Jan–Jun / Jul–Dec)</option>
+          <option value="annual">Annual (calendar year)</option>
+          <option value="anniversary">Card anniversary year</option>
+          <option value="onetime">One-time</option>
+        </select>
+      </div>
+    </div>
+    <div class="field"><label>Note (optional)</label><input id="b_note" placeholder="e.g. book via Capital One Travel"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeBenModal()">Cancel</button>
+      <button class="btn primary" onclick="saveBenefit()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+//  FIREBASE LIVE SYNC  — paste your config between the { } below.
+//  Leave it exactly as-is (empty apiKey) to run offline / local-only.
+//  Setup steps are in SETUP-SYNC.md next to this file.
+// ============================================================
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDD39fG2m-8kYHTJ2ZJ_DbicUjOk9y31Aw",
+  authDomain: "creditcard-7e0fd.firebaseapp.com",
+  databaseURL: "https://creditcard-7e0fd-default-rtdb.firebaseio.com",
+  projectId: "creditcard-7e0fd",
+  storageBucket: "creditcard-7e0fd.firebasestorage.app",
+  messagingSenderId: "454836236559",
+  appId: "1:454836236559:web:dddb83b1b883b58a8b4e7a",
+  measurementId: "G-WNTGSM6XWB"
+};
+const VAPID_KEY = "";      // <-- Cloud Messaging → Web Push certificate key (for closed-app push; Part 4a)
+const SYNC_PATH = 'family-tracker/shared';   // both of you point at the same path
+// ============================================================
+
+const STORAGE_KEY = 'ccTracker_v6';
+const TODAY = new Date();
+let db=null, auth=null, currentUser=null, syncReady=false, applyingRemote=false, saveTimer=null, dbStarted=false;
+function syncConfigured(){ return !!(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.databaseURL && window.firebase); }
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const PER_YEAR = { monthly:12, quarterly:4, semiannual:2, annual:1, anniversary:1, onetime:0 };
+const CAD_SHORT = { monthly:'Monthly', quarterly:'Quarterly', semiannual:'Semi-annual', annual:'Annual', anniversary:'Anniversary', onetime:'One-time' };
+const LEAD_DAYS = 14; // alert window
+
+// ---------- Seed data — blank by default. Sign in to load your real cards from shared sync. ----------
+const SEED = [
+];
+
+let state = load();
+let view = 'fees';
+let activeOwner = 'All';
+const expanded = new Set();
+
+function load(){
+  try { const raw = localStorage.getItem(STORAGE_KEY); if (raw) { const s=JSON.parse(raw); if(!s.settings)s.settings={alerts:false,notified:{}}; return s; } } catch(e){}
+  const seeded = { cards: SEED.map((c,i)=>({ id:'c'+i, checks:{}, ...c })), settings:{alerts:false, notified:{}} };
+  save(seeded); return seeded;
+}
+function save(s){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(s||state));   // always persists locally
+  if(db && syncReady && !applyingRemote){                        // and pushes to the cloud (debounced)
+    clearTimeout(saveTimer);
+    saveTimer=setTimeout(()=>{
+      state.updatedAt=Date.now();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      db.ref(SYNC_PATH).set(state).catch(e=>console.warn('sync push failed',e));
+    },400);
+  }
+}
+function setSyncBadge(status){
+  const b=document.getElementById('syncBadge'); if(!b)return;
+  const map={ off:['⚪ Offline','var(--muted)'], connecting:['🟡 Connecting…','var(--amber)'],
+    live:['🟢 Live sync on','var(--green)'], error:['🔴 Sync error','var(--red)'] };
+  const [txt,col]=map[status]||map.off; b.textContent=txt; b.style.color=col;
+}
+function initSync(){
+  if(!syncConfigured()){ setSyncBadge('off'); render(); fireNotifications(); return; }   // no config → local-only, no login required
+  try{
+    setSyncBadge('connecting');
+    firebase.initializeApp(FIREBASE_CONFIG);
+    auth=firebase.auth();
+    auth.onAuthStateChanged(user=>{
+      currentUser=user;
+      const lo=document.getElementById('logoutBtn');
+      if(user){ hideLogin(); if(lo)lo.style.display=''; startDb(); setupMessaging(); render(); fireNotifications(); }
+      else { if(lo)lo.style.display='none'; showLogin(); document.getElementById('main').innerHTML=''; }
+    });
+  }catch(e){ console.warn('sync init failed',e); setSyncBadge('error'); render(); fireNotifications(); }
+}
+function showLogin(){ document.getElementById('loginOverlay').classList.add('show'); }
+function hideLogin(){ document.getElementById('loginOverlay').classList.remove('show'); }
+function doLogin(){
+  const email=document.getElementById('lg_email').value.trim();
+  const pass=document.getElementById('lg_pass').value;
+  const err=document.getElementById('lg_err'); err.textContent='';
+  if(!email||!pass){ err.textContent='Enter email and password.'; return; }
+  auth.signInWithEmailAndPassword(email,pass).catch(e=>{
+    err.textContent = e.code==='auth/invalid-credential'||e.code==='auth/wrong-password'||e.code==='auth/user-not-found'
+      ? 'Wrong email or password.' : (e.message||'Sign-in failed.');
+  });
+}
+function doLogout(){ if(auth) auth.signOut().then(()=>location.reload()); }
+function startDb(){
+  if(dbStarted) return; dbStarted=true;
+  db=firebase.database();
+  db.ref('.info/connected').on('value',s=>{ if(syncReady) setSyncBadge(s.val()?'live':'connecting'); });
+  const ref=db.ref(SYNC_PATH);
+    // first read: merge whichever copy is newer (cloud vs this device)
+    ref.once('value').then(snap=>{
+      const remote=snap.val();
+      if(remote && remote.cards){
+        const localTime=state.updatedAt||0, remoteTime=remote.updatedAt||0;
+        if(remoteTime>=localTime){ applyRemote(remote); }
+        else { ref.set(state); }              // our copy is newer → seed the cloud
+      } else { ref.set(state); }              // cloud empty → seed it
+      syncReady=true; setSyncBadge('live');
+      // live listener: any change by either person updates everyone
+      ref.on('value',snap=>{ const r=snap.val(); if(r && r.cards && r.updatedAt!==state.updatedAt) applyRemote(r); });
+    }).catch(e=>{ console.warn(e); setSyncBadge('error'); });
+}
+// ---------- Cloud Messaging: push even when the app is fully closed ----------
+function setupMessaging(){
+  if(!VAPID_KEY || !firebase.messaging || !('serviceWorker'in navigator) || !location.protocol.startsWith('http')) return;
+  if(!('Notification'in window) || Notification.permission!=='granted') return;
+  try{
+    const messaging=firebase.messaging();
+    navigator.serviceWorker.register('./firebase-messaging-sw.js').then(reg=>{
+      messaging.getToken({vapidKey:VAPID_KEY, serviceWorkerRegistration:reg}).then(token=>{
+        if(token && db && currentUser){ db.ref(SYNC_PATH+'/_push/'+currentUser.uid).set({token, at:Date.now()}); }
+      }).catch(e=>console.warn('getToken failed',e));
+    });
+    messaging.onMessage(p=>{ const n=p.notification||{}; showNote(n.title||'Card Tracker', n.body||'', 'fcm'); });
+  }catch(e){ console.warn('messaging setup failed',e); }
+}
+function applyRemote(remote){
+  applyingRemote=true;
+  state=remote; if(!state.settings) state.settings={alerts:false,notified:{}};
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  applyingRemote=false;
+  render(); updateAlertBtn(); fireNotifications();
+}
+function owners(){ return Array.from(new Set(state.cards.map(c=>c.owner))); }
+
+// ---------- date / period helpers ----------
+function startOfToday(){ return new Date(TODAY.getFullYear(),TODAY.getMonth(),TODAY.getDate()); }
+function daysUntil(date){ return Math.round((date - startOfToday())/86400000); }
+function nextRenewal(card){
+  const m=card.month-1; let d=new Date(TODAY.getFullYear(),m,1);
+  if (d < new Date(TODAY.getFullYear(),TODAY.getMonth(),1)) d=new Date(TODAY.getFullYear()+1,m,1);
+  return d;
+}
+function anniversaryYearKey(card){
+  const passed=(TODAY.getMonth()+1)>=card.month; return 'AY'+(passed?TODAY.getFullYear():TODAY.getFullYear()-1);
+}
+function periodKey(card,cad){
+  const y=TODAY.getFullYear(), mo=TODAY.getMonth();
+  switch(cad){
+    case 'monthly': return y+'-'+(mo+1);
+    case 'quarterly': return y+'-Q'+(Math.floor(mo/3)+1);
+    case 'semiannual': return y+'-H'+(mo<6?1:2);
+    case 'annual': return ''+y;
+    case 'anniversary': return anniversaryYearKey(card);
+    case 'onetime': return 'once';
+  }
+}
+function periodEnd(card,cad){
+  const y=TODAY.getFullYear(), mo=TODAY.getMonth();
+  switch(cad){
+    case 'monthly': return new Date(y,mo+1,0);
+    case 'quarterly': return new Date(y,Math.floor(mo/3)*3+3,0);
+    case 'semiannual': return mo<6? new Date(y,5,30):new Date(y,11,31);
+    case 'annual': return new Date(y,11,31);
+    case 'anniversary': return nextRenewal(card);
+    case 'onetime': return null;
+  }
+}
+function periodLabel(cad){
+  const y=TODAY.getFullYear(), mo=TODAY.getMonth();
+  switch(cad){
+    case 'monthly': return MONTHS[mo]+' '+y;
+    case 'quarterly': return 'Q'+(Math.floor(mo/3)+1)+' '+y;
+    case 'semiannual': return (mo<6?'Jan–Jun':'Jul–Dec')+' '+y;
+    case 'annual': return y+' (calendar)';
+    case 'anniversary': return 'This anniversary year';
+    case 'onetime': return 'One-time';
+  }
+}
+function benChecked(card,idx){ return card.checks?.[idx+':'+periodKey(card,card.benefits[idx].cadence)]===true; }
+function toggleBen(cardId,idx){
+  const c=state.cards.find(x=>x.id===cardId); const k=idx+':'+periodKey(c,c.benefits[idx].cadence);
+  c.checks=c.checks||{}; if(c.checks[k]) delete c.checks[k]; else c.checks[k]=true;
+  save(); render(); // persists immediately
+}
+function cardRiskNow(card){ let s=0; (card.benefits||[]).forEach((b,i)=>{ if(!benChecked(card,i)) s+=Number(b.amount)||0; }); return s; }
+function cardAnnualValue(card){ return (card.benefits||[]).reduce((s,b)=>s+(Number(b.amount)||0)*(PER_YEAR[b.cadence]||0),0); }
+
+// ---------- alerts ----------
+const FREENIGHT_LEAD_DAYS = 90; // free-night certs need more runway to book a trip
+function isFreeNight(b){ return /free night|night award|certificate/i.test((b.name||'')+' '+(b.note||'')); }
+function collectAlerts(){
+  const out=[];
+  scopeCards().forEach(c=>{
+    const fee=Number(c.fee)||0;
+    if(fee>0){ const d=daysUntil(nextRenewal(c)); if(d>=0&&d<=LEAD_DAYS) out.push({type:'fee',card:c,days:d,text:`${c.owner}: ${c.name} $${fee} annual fee posts in ${d} day${d!==1?'s':''}`}); }
+    (c.benefits||[]).forEach((b,i)=>{
+      if(benChecked(c,i))return;
+      const free=isFreeNight(b);
+      // free nights use their own expiration date (set or default); other one-time benefits skip alerts
+      let end;
+      if(free){ end = b.expires ? new Date(b.expires+'T00:00:00') : (b.cadence==='onetime'? new Date(defaultExpiry(c)+'T00:00:00') : periodEnd(c,b.cadence)); }
+      else { if(b.cadence==='onetime')return; end=periodEnd(c,b.cadence); }
+      if(!end)return; const d=daysUntil(end);
+      const window=free?FREENIGHT_LEAD_DAYS:LEAD_DAYS;
+      if(d>=0&&d<=window){
+        const amt=Number(b.amount)||0;
+        if(free){ out.push({type:'freenight',card:c,days:d,text:`🏨 ${c.owner}: ${c.name} — use your free night “${b.name}” before it renews/expires in ${d} day${d!==1?'s':''} (book a trip!)`}); }
+        else { out.push({type:'ben',card:c,days:d,text:`${c.owner}: ${c.name} — “${b.name}”${amt?` ($${amt})`:''} resets in ${d} day${d!==1?'s':''}`}); }
+      }
+    });
+  });
+  return out.sort((a,b)=>a.days-b.days);
+}
+function renderAlertBar(){
+  const bar=document.getElementById('alertBar'); const items=collectAlerts();
+  if(!items.length){ bar.classList.remove('show'); bar.innerHTML=''; return; }
+  bar.classList.add('show');
+  bar.innerHTML=`<h3>⚠️ ${items.length} thing${items.length!==1?'s':''} need attention soon</h3><ul>${items.map(i=>`<li>${esc(i.text)}</li>`).join('')}</ul>`;
+}
+function fireNotifications(){
+  if(!state.settings.alerts || !('Notification'in window) || Notification.permission!=='granted') return;
+  state.settings.notified=state.settings.notified||{};
+  collectAlerts().forEach(i=>{
+    const key=(i.type)+':'+i.card.id+':'+(i.text)+':'+startOfToday().toDateString();
+    if(!state.settings.notified[key]){ showNote('Card Tracker', i.text, key); state.settings.notified[key]=true; }
+  });
+  save();
+}
+function showNote(title, body, tag){
+  // Prefer the service worker (shows even when tab is unfocused); fall back to a page Notification.
+  if(navigator.serviceWorker && navigator.serviceWorker.controller){
+    navigator.serviceWorker.controller.postMessage({type:'notify',title,body,tag});
+  } else { try{ new Notification(title,{body}); }catch(e){} }
+}
+function toggleAlerts(){
+  if(!('Notification'in window)){ alert('This browser does not support notifications. In-page alerts still work.'); return; }
+  if(Notification.permission==='granted'){ state.settings.alerts=!state.settings.alerts; save(); updateAlertBtn(); if(state.settings.alerts) fireNotifications(); return; }
+  Notification.requestPermission().then(p=>{ if(p==='granted'){ state.settings.alerts=true; save(); updateAlertBtn(); fireNotifications(); if(currentUser) setupMessaging(); }
+    else { alert('Notifications were blocked. In-page alerts (yellow banner) still work.\n\nNote: desktop push only fires while this page is open. For alerts when the site is closed, it would need to be hosted online with a service worker.'); } });
+}
+function updateAlertBtn(){
+  const b=document.getElementById('alertBtn'); const on=state.settings.alerts && ('Notification'in window) && Notification.permission==='granted';
+  b.classList.toggle('on',on); b.textContent = on?'🔔 Alerts on':'🔔 Enable alerts';
+}
+
+// ---------- render ----------
+function scopeCards(){ return state.cards.filter(c=>activeOwner==='All'||c.owner===activeOwner); }
+function render(){ renderSegs(); renderSummary(); renderAlertBar();
+  document.getElementById('expandBtn').style.display = view==='cards'?'':'none';
+  document.getElementById('collapseBtn').style.display = view==='cards'?'':'none';
+  if(view==='fees') renderFees(); else if(view==='cards') renderCards(); else if(view==='timeline') renderTimeline(); else if(view==='worth') renderWorth(); else if(view==='travel') renderTravel(); else renderAdvice();
+}
+function renderSegs(){
+  document.querySelectorAll('#viewSeg button').forEach(b=>b.classList.toggle('active',b.dataset.v===view));
+  document.getElementById('ownerSeg').innerHTML=['All',...owners()].map(o=>`<button data-o="${o}" class="${activeOwner===o?'active':''}">${o}</button>`).join('');
+  document.querySelectorAll('#ownerSeg button').forEach(b=>b.onclick=()=>{activeOwner=b.dataset.o;render();});
+}
+function renderSummary(){
+  const s=scopeCards();
+  const totalFees=s.reduce((a,c)=>a+(Number(c.fee)||0),0);
+  const riskNow=s.reduce((a,c)=>a+cardRiskNow(c),0);
+  const annual=s.reduce((a,c)=>a+cardAnnualValue(c),0);
+  const up=s.filter(c=>(Number(c.fee)||0)>0&&daysUntil(nextRenewal(c))<=90); const upT=up.reduce((a,c)=>a+Number(c.fee),0);
+  document.getElementById('summary').innerHTML=`
+    <div class="stat"><div class="label">Cards</div><div class="value">${s.length}</div></div>
+    <div class="stat"><div class="label">Total annual fees / yr</div><div class="value">$${totalFees.toLocaleString()}</div></div>
+    <div class="stat"><div class="label">Fees due next 90 days</div><div class="value">$${upT.toLocaleString()}</div><div class="hint">${up.length} card${up.length!==1?'s':''}</div></div>
+    <div class="stat"><div class="label">Unclaimed credits (now)</div><div class="value risk">$${Math.round(riskNow).toLocaleString()}</div><div class="hint">expiring this period</div></div>
+    <div class="stat"><div class="label">Benefit value / yr</div><div class="value">$${Math.round(annual).toLocaleString()}</div></div>`;
+}
+
+// ---- View 1: Fee Calendar (by closest calendar date) ----
+function renderFees(){
+  const rows=scopeCards().filter(c=>(Number(c.fee)||0)>0).map(c=>({c,date:nextRenewal(c),days:daysUntil(nextRenewal(c))}))
+    .sort((a,b)=>a.days-b.days);
+  if(!rows.length){ document.getElementById('main').innerHTML='<div class="empty-ben">No cards with annual fees in this view.</div>'; return; }
+  // group by Month Year of the fee date
+  const groups={};
+  rows.forEach(r=>{ const k=MONTHS[r.date.getMonth()]+' '+r.date.getFullYear(); (groups[k]=groups[k]||[]).push(r); });
+  let html=`<div class="empty-ben" style="margin-bottom:8px">Each card's annual fee posts on its open-month anniversary. Cancel or downgrade <b>before</b> the date to avoid the fee.</div>`;
+  Object.keys(groups).forEach(k=>{
+    const gt=groups[k].reduce((a,r)=>a+Number(r.c.fee),0);
+    html+=`<div class="group"><div class="group-head"><span>${k}</span><span class="gsum">$${gt.toLocaleString()}</span></div>`;
+    groups[k].forEach(r=>{
+      const cls=r.days<=30?'urgent':r.days<=60?'soon':'';
+      html+=`<div class="row ${cls}">
+        <span class="chip ${r.c.owner}">${r.c.owner}</span>
+        <div class="row-main"><div class="row-title">${esc(r.c.name)}</div>
+          <div class="row-sub">${esc(r.c.issuer||'')}${r.c.note?' · '+esc(r.c.note):''}</div></div>
+        <div class="row-right">
+          <div class="fee">$${Number(r.c.fee).toLocaleString()}</div>
+          <div class="days ${cls}">${r.date.getDate?'':''}${MONTHS[r.date.getMonth()]} ${r.date.getFullYear()} · ${r.days}d</div>
+        </div>
+        <div class="ben-actions">
+          <button class="icon-btn" title="Edit" onclick="openCardModal('${r.c.id}')">✏️</button>
+          <button class="icon-btn" title="Delete card" onclick="deleteCard('${r.c.id}')">🗑️</button>
+        </div>
+      </div>`;
+    });
+    html+=`</div>`;
+  });
+  document.getElementById('main').innerHTML=html;
+}
+
+// ---- View 2: By Card ----
+function renderCards(){
+  const cards=scopeCards().slice().sort((a,b)=>{ const fa=Number(a.fee)||0,fb=Number(b.fee)||0; if(fb!==fa)return fb-fa; return daysUntil(nextRenewal(a))-daysUntil(nextRenewal(b)); });
+  if(!cards.length){ document.getElementById('main').innerHTML='<div class="empty-ben">No cards. Click “+ Add card”.</div>'; return; }
+  document.getElementById('main').innerHTML=cards.map(c=>{
+    const fee=Number(c.fee)||0, ren=nextRenewal(c), du=daysUntil(ren);
+    let dc='',dt=''; if(fee>0){ dt=`${MONTHS[ren.getMonth()]} ${ren.getFullYear()} <small>· ${du}d</small>`; if(du<=30)dc='urgent'; else if(du<=60)dc='soon'; } else dt='<small>no fee</small>';
+    const nB=(c.benefits||[]).length, un=(c.benefits||[]).filter((b,i)=>!benChecked(c,i)).length;
+    const pill=nB?`<span class="pill ${un?'':'none'}">${un?un+' to use':'all done ✓'}</span>`:`<span class="pill none">no benefits</span>`;
+    const rows=nB?c.benefits.map((b,i)=>{ const done=benChecked(c,i),amt=Number(b.amount)||0;
+      return `<div class="ben"><input type="checkbox" ${done?'checked':''} onchange="toggleBen('${c.id}',${i})">
+        <div class="ben-main"><div class="ben-name ${done?'done':''}">${esc(b.name)}<span class="cadence-tag">${CAD_SHORT[b.cadence]}</span></div>
+        <div class="ben-meta">${periodLabel(b.cadence)}${b.note?' · '+esc(b.note):''}</div></div>
+        <div class="ben-amt">${amt>0?'$'+amt:''}</div>
+        <div class="ben-actions"><button class="icon-btn" onclick="event.stopPropagation();openBenModal('${c.id}',${i})">✏️</button>
+        <button class="icon-btn" onclick="event.stopPropagation();deleteBenefit('${c.id}',${i})">🗑️</button></div></div>`;
+    }).join(''):'<div class="empty-ben">No benefits tracked yet.</div>';
+    return `<div class="card ${expanded.has(c.id)?'open-x':''}">
+      <div class="card-head" onclick="toggleExpand('${c.id}')"><span class="caret">▶</span>
+        <span class="chip ${c.owner}">${c.owner}</span>
+        <div class="card-main"><div class="card-title">${esc(c.name)}</div>
+        <div class="card-sub">${esc(c.issuer||'')} · opened ${MONTHS[c.month-1]} ${c.year}${c.note?' · <span class="card-note">'+esc(c.note)+'</span>':''}</div></div>
+        ${pill}<div><div class="fee ${fee===0?'zero':''}">${fee===0?'$0':'$'+fee.toLocaleString()}</div><div class="due ${dc}">${dt}</div></div></div>
+      <div class="card-body">${rows}
+        ${todoBlock(c)}
+        <div class="notes-block"><label class="notes-label">📝 Notes</label>
+          <textarea class="notes-area" placeholder="e.g. call to downgrade before renewal, ask for retention offer…" onchange="saveNote('${c.id}',this.value)">${esc(c.memo||'')}</textarea></div>
+        <div class="body-tools"><button class="btn" onclick="openBenModal('${c.id}')">+ Add benefit</button>
+        <button class="btn" onclick="addTodo('${c.id}')">+ Add to-do</button>
+        <button class="btn" onclick="openCardModal('${c.id}')">Edit card</button>
+        <button class="btn" onclick="deleteCard('${c.id}')">Delete card</button></div></div></div>`;
+  }).join('');
+}
+
+// ---- View 3: By Timeline (benefits grouped by reset period) ----
+function renderTimeline(){
+  const order=['monthly','quarterly','semiannual','annual','anniversary'];
+  const heads={monthly:'This month',quarterly:'This quarter',semiannual:'This half-year',annual:'This year',anniversary:'This anniversary year'};
+  const buckets={}; order.forEach(o=>buckets[o]=[]);
+  scopeCards().forEach(c=>(c.benefits||[]).forEach((b,i)=>{ if(b.cadence==='onetime')return; buckets[b.cadence].push({c,b,i,done:benChecked(c,i),end:periodEnd(c,b.cadence)}); }));
+  let html=`<div class="empty-ben" style="margin-bottom:8px">Everything to use, grouped by when it resets. Check items off as you use them — unclaimed dollar value shows per group.</div>`;
+  let any=false;
+  order.forEach(cad=>{
+    let list=buckets[cad]; if(!list.length)return; any=true;
+    list.sort((a,b)=>(a.done-b.done)|| (a.end&&b.end? a.end-b.end:0));
+    const unclaimedVal=list.filter(x=>!x.done).reduce((a,x)=>a+(Number(x.b.amount)||0),0);
+    const end=list[0].end, dleft=end?daysUntil(end):null;
+    html+=`<div class="group"><div class="group-head"><span>${heads[cad]} · <span style="font-weight:600;text-transform:none;color:var(--muted)">${periodLabel(cad)}${dleft!=null?` · resets in ${dleft}d`:''}</span></span><span class="gsum">${unclaimedVal>0?'$'+Math.round(unclaimedVal).toLocaleString()+' left':''}</span></div>`;
+    list.forEach(x=>{ const amt=Number(x.b.amount)||0;
+      html+=`<div class="row"><input type="checkbox" style="width:19px;height:19px;accent-color:var(--green);cursor:pointer" ${x.done?'checked':''} onchange="toggleBen('${x.c.id}',${x.i})">
+        <span class="chip ${x.c.owner}">${x.c.owner}</span>
+        <div class="row-main"><div class="row-title ${x.done?'':''}" style="${x.done?'text-decoration:line-through;color:var(--muted)':''}">${esc(x.b.name)}</div>
+          <div class="row-sub">${esc(x.c.name)}${x.b.note?' · '+esc(x.b.note):''}</div></div>
+        <div class="ben-amt">${amt>0?'$'+amt:''}</div></div>`;
+    });
+    html+=`</div>`;
+  });
+  document.getElementById('main').innerHTML= any?html:'<div class="empty-ben">No recurring benefits to show.</div>';
+}
+
+// ---- View 4: Advice (best card per spending category) ----
+let adviceQuery='';
+const CPP={UR:1.75,MR:1.75,CapOne:1.7,Hyatt:1.7,KoreanAir:1.5,Delta:1.2,United:1.3,Marriott:0.7,IHG:0.5,cash:1.0};
+const CUR_NAME={UR:'Ultimate Rewards pts',MR:'Membership Rewards pts',CapOne:'Capital One miles',Hyatt:'Hyatt pts',KoreanAir:'SKYPASS miles',Delta:'SkyMiles',United:'United miles',Marriott:'Bonvoy pts',IHG:'IHG pts',cash:'cash back'};
+// earn profiles keyed by normalized card name
+const REWARDS={
+  'freedom unlimited':{cur:'UR',base:1.5,cats:{dining:3,drugstore:3,travel:5},note:'5x Chase Travel, 3x dining & drugstores, 1.5x everything else'},
+  'world of hyatt visa':{cur:'Hyatt',base:1,cats:{hotel:4,dining:2,transit:2,gas:2,flights:2},note:'4x at Hyatt hotels; 2x dining/transit/gas/airline/fitness'},
+  "macy's card":{cur:'cash',base:1,cats:{department:5},note:"Up to 5% back in Star Money at Macy's (Platinum tier)"},
+  'ihg one rewards premier':{cur:'IHG',base:1,cats:{hotel:10,dining:5,gas:5,travel:5},note:'Up to 26x at IHG hotels; 5x travel/dining/gas'},
+  'skypass visa signature':{cur:'KoreanAir',base:1,cats:{flights:2,dining:2,groceries:2,gas:2},note:'Bonus SKYPASS miles on Korean Air & everyday categories'},
+  'venture x':{cur:'CapOne',base:2,cats:{hotel:10,travel:5,flights:5},note:'2x everything; 5x flights & 10x hotels/cars booked via Capital One Travel'},
+  'ink business preferred':{cur:'UR',base:1,cats:{travel:3,internet:3},note:'3x on travel, shipping, internet/cable/phone & advertising (first $150k/yr)'},
+  'delta skymiles gold':{cur:'Delta',base:1,cats:{flights:2,dining:2,groceries:2},note:'2x on Delta, dining & U.S. groceries'},
+  'sapphire reserve':{cur:'UR',base:1,cats:{travel:4,flights:4,hotel:4,dining:3},note:'8x Chase Travel; 4x flights & hotels booked direct; 3x dining'},
+  'discover it cash back':{cur:'cash',base:1,cats:{},rotating:true,note:'5% on the current rotating quarterly category (activate); 1% otherwise'},
+  'blue cash everyday':{cur:'cash',base:1,cats:{groceries:3,gas:3,onlineretail:3},note:'3% U.S. supermarkets, gas & U.S. online retail (up to $6k each/yr)'},
+  'united gateway':{cur:'United',base:1,cats:{flights:2,gas:2,transit:2,dining:2},note:'2x on United, gas, local transit & dining'},
+  'sapphire preferred':{cur:'UR',base:1,cats:{travel:2,flights:2,hotel:2,dining:3,groceries:3,streaming:3},note:'5x Chase Travel; 3x dining/online grocery/streaming; 2x travel'},
+  'marriott bonvoy':{cur:'Marriott',base:2,cats:{hotel:6},note:'6x at Marriott; 2x everything else'},
+  'platinum':{cur:'MR',base:1,cats:{flights:5,hotel:5},note:'5x flights (Amex Travel or airline direct) & 5x prepaid hotels via Amex Travel'},
+};
+const CATS=[
+  {key:'dining',label:'Dining & restaurants',kw:['dining','restaurant','food','eat','coffee','cafe','bar','takeout','doordash','ubereats','lunch','dinner']},
+  {key:'groceries',label:'Groceries & supermarkets',kw:['grocery','groceries','supermarket','costco','wholesale','market']},
+  {key:'gas',label:'Gas stations',kw:['gas','fuel','gasoline','petrol']},
+  {key:'flights',label:'Flights / airfare',kw:['flight','airfare','airline','airplane','plane','airticket','fly']},
+  {key:'hotel',label:'Hotels & lodging',kw:['hotel','lodging','motel','resort','airbnb','accommodation']},
+  {key:'travel',label:'General travel',kw:['travel','trip','vacation','train','cruise','toll','taxi','uber','lyft','rideshare','car rental','rental car']},
+  {key:'streaming',label:'Streaming services',kw:['streaming','netflix','hulu','disney','spotify','youtube','music','apple tv','max','peacock']},
+  {key:'onlineretail',label:'Online shopping',kw:['online','amazon','ecommerce','shopping','retail']},
+  {key:'internet',label:'Internet / cable / phone / utilities',kw:['internet','cable','phone','cell','wifi','utility','utilities','wireless','broadband','landline','telecom']},
+  {key:'transit',label:'Transit & commuting',kw:['transit','commute','commuting','subway','metro','bus','parking']},
+  {key:'drugstore',label:'Drugstores & pharmacy',kw:['drugstore','pharmacy','cvs','walgreens','drug']},
+  {key:'department',label:"Department store (Macy's)",kw:['macy','department']},
+  {key:'general',label:'Everything else',kw:['everything','general','other','misc','anything','default','normal']},
+];
+function normName(n){ return String(n).toLowerCase().replace(/[®™]/g,'').replace(/\s+/g,' ').trim(); }
+function rotatingCat(key){ return ['groceries','gas','dining','onlineretail','transit','drugstore'].includes(key); }
+// ---- View: Worth It? (fee vs captured benefit value ROI) ----
+function renderWorth(){
+  const cards=scopeCards().slice().sort((a,b)=>(Number(b.fee)||0)-(Number(a.fee)||0));
+  const withFee=cards.filter(c=>(Number(c.fee)||0)>0);
+  let totFee=0, totCaptured=0, totAvail=0;
+  let rows='';
+  withFee.forEach(c=>{
+    const fee=Number(c.fee)||0;
+    const avail=cardAnnualValue(c);                    // total $ benefit value/yr
+    // captured = benefits checked at least once this period, scaled to annual
+    let captured=0;
+    (c.benefits||[]).forEach((b,i)=>{ if(benChecked(c,i)) captured+=(Number(b.amount)||0)*(PER_YEAR[b.cadence]||0); });
+    totFee+=fee; totCaptured+=captured; totAvail+=avail;
+    const netAvail=avail-fee, netCap=captured-fee;
+    // verdict: green if available value comfortably beats fee, amber if close, red if not
+    let verdict, vclass;
+    if(avail>=fee*1.5){ verdict='Worth keeping'; vclass='good'; }
+    else if(avail>=fee){ verdict='Break-even — use it'; vclass='warn'; }
+    else { verdict='Reconsider'; vclass='bad'; }
+    const capPct=avail>0?Math.min(captured/avail*100,100):0;
+    rows+=`<div class="worth-row">
+      <div class="worth-head"><span class="chip ${c.owner}">${c.owner}</span>
+        <span class="worth-name">${esc(c.name)}</span>
+        <span class="badge ${vclass}">${verdict}</span></div>
+      <div class="worth-grid">
+        <div><div class="wlabel">Annual fee</div><div class="wval fee-neg">−$${fee.toLocaleString()}</div></div>
+        <div><div class="wlabel">Benefit value/yr</div><div class="wval">$${Math.round(avail).toLocaleString()}</div></div>
+        <div><div class="wlabel">Net if fully used</div><div class="wval ${netAvail>=0?'pos':'neg'}">${netAvail>=0?'+':'−'}$${Math.abs(Math.round(netAvail)).toLocaleString()}</div></div>
+        <div><div class="wlabel">Captured so far</div><div class="wval">$${Math.round(captured).toLocaleString()}</div></div>
+      </div>
+      <div class="bar" title="${Math.round(capPct)}% of this card's benefit value claimed this period"><span style="width:${capPct}%"></span></div>
+      ${c.note?`<div class="worth-note">${esc(c.note)}</div>`:''}
+    </div>`;
+  });
+  const noFee=cards.filter(c=>!(Number(c.fee)>0)).length;
+  document.getElementById('main').innerHTML=`
+    <div class="summary">
+      <div class="stat"><div class="label">Total annual fees</div><div class="value" style="color:var(--red)">$${totFee.toLocaleString()}</div><div class="hint">${withFee.length} paid card${withFee.length!==1?'s':''}</div></div>
+      <div class="stat"><div class="label">Benefit value available</div><div class="value" style="color:var(--green)">$${Math.round(totAvail).toLocaleString()}</div><div class="hint">if fully used</div></div>
+      <div class="stat"><div class="label">Net (value − fees)</div><div class="value" style="color:${totAvail-totFee>=0?'var(--green)':'var(--red)'}">${totAvail-totFee>=0?'+':'−'}$${Math.abs(Math.round(totAvail-totFee)).toLocaleString()}</div></div>
+      <div class="stat"><div class="label">No-fee cards</div><div class="value">${noFee}</div><div class="hint">always keepers</div></div>
+    </div>
+    <div class="empty-ben" style="margin-bottom:10px">“Benefit value” counts trackable statement credits only — it doesn't include miles earned, lounge/travel-protection value, or welcome bonuses, so a low number doesn't always mean “drop it.” Read the note on each card. Check off benefits (By Card / Timeline) to grow “captured.”</div>
+    ${rows||'<div class="empty-ben">No cards with annual fees for '+activeOwner+'.</div>'}`;
+}
+
+// ---- View: Travel benefits (grouped, free-night certs flagged by anniversary) ----
+function classifyTravel(b){
+  const t=(b.name+' '+(b.note||'')).toLowerCase();
+  if(/free night|night award|certificate/.test(t)) return 'freenight';
+  if(/hotel|fhr|the edit|hotel collection|stays|bonvoy|hyatt|ihg|marriott/.test(t) && /credit|hotel/.test(t)) return 'hotel';
+  if(/lounge|clear|priority pass|centurion|global lounge/.test(t)) return 'lounge';
+  if(/global entry|tsa|precheck|nexus/.test(t)) return 'precheck';
+  if(/airline|flight|delta|united|southwest|korean air|skypass|companion|checked bag|inflight|airfare/.test(t)) return 'airline';
+  if(/travel credit|capital one travel|chase travel|travel purchases|anniversary bonus miles/.test(t)) return 'travelcredit';
+  return null;
+}
+function renderTravel(){
+  const groups={freenight:[],hotel:[],airline:[],lounge:[],precheck:[],travelcredit:[]};
+  scopeCards().forEach(c=>{
+    (c.benefits||[]).forEach((b,i)=>{
+      const g=classifyTravel(b); if(!g) return;
+      groups[g].push({c,b,i});
+    });
+  });
+  const meta=[
+    ['freenight','🏨 Free night certificates','Highest-value & easily forgotten — each is often worth $150–400+.'],
+    ['hotel','🛏️ Hotel credits',''],
+    ['airline','✈️ Airline credits & perks',''],
+    ['lounge','🛋️ Lounge access & CLEAR',''],
+    ['precheck','🛂 Global Entry / TSA PreCheck','Usually reimbursed once every ~4 years.'],
+    ['travelcredit','💳 Flexible travel credits',''],
+  ];
+  const anyFound=Object.values(groups).some(a=>a.length);
+  const whose = activeOwner==='All' ? "the family's" : activeOwner+"'s";
+  let h=`<div class="empty-ben" style="margin-bottom:10px">Every travel-related perk across ${whose} cards. <b>Check one off once you've used it</b> — it syncs with the other tabs and resets automatically each period. Free-night certs show their renewal countdown.</div>`;
+  if(!anyFound){ document.getElementById('main').innerHTML=h+'<div class="empty-ben">No travel benefits for this selection.</div>'; return; }
+  meta.forEach(([key,title,sub])=>{
+    const list=groups[key]; if(!list.length) return;
+    // sum annual $ value for this group
+    const val=list.reduce((a,x)=>a+(Number(x.b.amount)||0)*(PER_YEAR[x.b.cadence]||0),0);
+    const toUse=list.filter(x=>!benChecked(x.c,x.i)).length;
+    const status=toUse? `${toUse} to use`:'all used ✓';
+    h+=`<div class="group"><div class="group-head"><span>${title} <span style="font-weight:600;text-transform:none;color:${toUse?'var(--muted)':'var(--green)'}">· ${status}</span></span><span class="gsum">${val>0?'$'+Math.round(val).toLocaleString()+'/yr':''}</span></div>`;
+    if(sub) h+=`<div class="empty-ben" style="padding:4px 4px 8px">${sub}</div>`;
+    list.forEach(x=>{
+      const amt=Number(x.b.amount)||0;
+      const done=benChecked(x.c,x.i);
+      let when='';
+      if(key==='freenight'){
+        // free nights: show an EDITABLE expiration date. Default = next anniversary + 12 months if none set.
+        const exp=x.b.expires||defaultExpiry(x.c);
+        const du=daysUntil(new Date(exp+'T00:00:00'));
+        when=`<div class="due ${du<=90?'soon':''}" style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">
+          <span>expires · ${du}d</span>
+          <input type="date" value="${exp}" onchange="setExpiry('${x.c.id}',${x.i},this.value)" style="font-size:11px;border:1px solid var(--border);border-radius:6px;padding:1px 4px;background:var(--bg);color:var(--text)">
+        </div>`;
+      } else if(x.b.cadence==='anniversary'){
+        const ren=nextRenewal(x.c); const du=daysUntil(ren);
+        when=`<div class="due ${du<=90?'soon':''}">renews ${MONTHS[ren.getMonth()]} ${ren.getFullYear()} · ${du}d</div>`;
+      }
+      const delBtn = x.b.custom ? `<button class="icon-btn" title="Remove" onclick="deleteBenefit('${x.c.id}',${x.i})">🗑️</button>` : '';
+      h+=`<div class="row"><input type="checkbox" style="width:19px;height:19px;accent-color:var(--green);cursor:pointer" ${done?'checked':''} onchange="toggleBen('${x.c.id}',${x.i})">
+        <span class="chip ${x.c.owner}">${x.c.owner}</span>
+        <div class="row-main"><div class="row-title" style="${done?'text-decoration:line-through;color:var(--muted)':''}">${esc(x.b.name)}</div>
+          <div class="row-sub">${esc(x.c.name)}${x.b.note?' · '+esc(x.b.note):''}</div></div>
+        <div class="row-right">${amt>0?`<div class="fee">$${amt}${x.b.cadence!=='onetime'?'<span style="font-weight:400;color:var(--muted)">/'+CAD_SHORT[x.b.cadence].toLowerCase()+'</span>':''}</div>`:''}${when}</div>
+        ${delBtn}</div>`;
+    });
+    // "add free night" button under the free-night group
+    if(key==='freenight'){
+      const cardsWithFN=[...new Set(list.map(x=>x.c.id))];
+      h+=`<div class="add-line" style="padding:8px 4px"><button class="benefit-btn" onclick="addFreeNight()">＋ Add a free night (e.g. earned from spend)</button></div>`;
+    }
+    h+=`</div>`;
+  });
+  document.getElementById('main').innerHTML=h;
+}
+// default free-night expiration = next anniversary + 12 months (typical cert life), as YYYY-MM-DD
+function defaultExpiry(card){
+  const ren=nextRenewal(card); const d=new Date(ren.getFullYear()+1, ren.getMonth(), ren.getDate());
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function setExpiry(cardId,idx,val){
+  const c=state.cards.find(x=>x.id===cardId); if(!c||!c.benefits[idx])return;
+  c.benefits[idx].expires=val; save(); render();
+}
+function addFreeNight(){
+  const cards=scopeCards();
+  if(!cards.length){ alert('No cards available.'); return; }
+  // pick which card the extra free night belongs to
+  let card;
+  if(cards.length===1){ card=cards[0]; }
+  else {
+    const list=cards.map((c,i)=>`${i+1}. ${c.owner} — ${c.name}`).join('\n');
+    const pick=prompt('Add the free night to which card?\n\n'+list+'\n\nEnter a number:');
+    const idx=parseInt(pick)-1; if(isNaN(idx)||!cards[idx])return; card=cards[idx];
+  }
+  const name=prompt('Name for this free night (e.g. "Bonus free night — $15k spend"):','Bonus free night');
+  if(name===null)return;
+  card.benefits=card.benefits||[];
+  card.benefits.push({name:(name.trim()||'Bonus free night'),amount:0,cadence:'onetime',custom:true,expires:defaultExpiry(card),note:'manually added'});
+  save(); render();
+}
+function renderAdvice(){
+  document.getElementById('main').innerHTML=`
+    <div class="empty-ben" style="margin-bottom:10px">Type what you're buying (e.g. <b>internet</b>, <b>groceries</b>, <b>flights</b>, <b>dining</b>) to see which card earns the most for ${activeOwner==='All'?'the family':activeOwner}.</div>
+    <div style="margin-bottom:16px"><input id="adviceInput" placeholder="Search a spending category…" value="${esc(adviceQuery)}"
+      style="width:100%;background:var(--panel);border:1px solid var(--border);border-radius:11px;padding:12px 14px;color:var(--text);font-size:15px;box-shadow:0 1px 2px rgba(180,150,40,.08)"></div>
+    <div id="adviceResults"></div>`;
+  const inp=document.getElementById('adviceInput');
+  inp.oninput=()=>{ adviceQuery=inp.value; updateAdviceResults(); };
+  inp.focus();
+  const v=inp.value.length; inp.setSelectionRange(v,v);
+  updateAdviceResults();
+}
+function updateAdviceResults(){
+  const box=document.getElementById('adviceResults'); if(!box)return;
+  const q=adviceQuery.toLowerCase().trim();
+  if(!q){ box.innerHTML=`<div class="empty-ben">Try: internet · groceries · flights · hotel · dining · gas · streaming · Korean Air · Macy's</div>`; return; }
+  const matched=CATS.filter(c=>c.kw.some(k=>q.includes(k)||k.includes(q))||q.includes(c.key));
+  const keys=matched.length?matched.map(c=>c.key):['general'];
+  const catLabels=matched.length?matched.map(c=>c.label).join(', '):'general spending';
+  // rank the scoped cards
+  const ranked=scopeCards().map(c=>{
+    const r=REWARDS[normName(c.name)];
+    if(!r) return {c,rate:0,mult:1,cur:'cash',note:'',catUsed:'general',unknown:true};
+    let best=null,bestKey='general';
+    keys.forEach(k=>{ const m=(r.cats&&r.cats[k]!=null)?r.cats[k]:null; if(m!=null&&(best==null||m>best)){best=m;bestKey=k;} });
+    let rotating=false;
+    if(best==null && r.rotating && keys.some(rotatingCat)){ best=5; bestKey='rotating'; rotating=true; }
+    if(best==null) best=r.base;
+    const rate=best*CPP[r.cur];
+    return {c,rate,mult:best,cur:r.cur,note:r.note,rotating,catUsed:bestKey,base:(best===r.base)};
+  }).filter(x=>!x.unknown).sort((a,b)=>b.rate-a.rate);
+  // benefit credits mentioning the query
+  const benHits=[];
+  scopeCards().forEach(c=>(c.benefits||[]).forEach(b=>{ const t=(b.name+' '+(b.note||'')).toLowerCase(); if(keys.some(k=>t.includes(k))||q.length>2&&t.includes(q)){ benHits.push({c,b}); } }));
+
+  const ord=['🥇 Best','🥈 2nd best','🥉 3rd best','4th','5th'];
+  let html=`<div class="group-head" style="margin-bottom:10px"><span>For ${esc(catLabels)}</span></div>`;
+  ranked.slice(0,5).forEach((x,i)=>{
+    const pct=x.rate.toFixed(2).replace(/\.00$/,'');
+    const rateTxt = x.cur==='cash' ? `${(x.mult).toFixed(2).replace(/\.00$/,'')}% cash back` : `${x.mult}x ${CUR_NAME[x.cur]} ≈ ${pct}% value`;
+    const why = x.rotating ? 'if this is the current rotating 5% category (activate quarterly)'
+              : x.base ? 'flat base earn rate (no bonus category)'
+              : x.note;
+    html+=`<div class="row"><span class="chip ${x.c.owner}">${x.c.owner}</span>
+      <div class="row-main"><div class="row-title">${ord[i]||(i+1+'th')} — ${esc(x.c.name)}</div>
+        <div class="row-sub">${esc(why)}</div></div>
+      <div class="ben-amt" style="color:var(--accent);font-size:14px">${rateTxt}</div></div>`;
+  });
+  if(!ranked.length) html+=`<div class="empty-ben">No cards to compare for ${activeOwner}.</div>`;
+  if(benHits.length){
+    html+=`<div class="group-head" style="margin:18px 0 10px"><span>Related statement credits</span></div>`;
+    benHits.forEach(h=>{ const amt=Number(h.b.amount)||0;
+      html+=`<div class="row"><span class="chip ${h.c.owner}">${h.c.owner}</span>
+        <div class="row-main"><div class="row-title">${esc(h.b.name)}</div><div class="row-sub">${esc(h.c.name)}${h.b.note?' · '+esc(h.b.note):''}</div></div>
+        <div class="ben-amt">${amt?'$'+amt+'/'+CAD_SHORT[h.b.cadence].toLowerCase():''}</div></div>`;
+    });
+  }
+  html+=`<div class="footer-note" style="text-align:left;margin-top:18px">Point values are estimates (redemption varies): UR/MR ≈1.75¢, Capital One ≈1.7¢, Hyatt ≈1.7¢, SKYPASS ≈1.5¢, United ≈1.3¢, Delta ≈1.2¢, Marriott ≈0.7¢, IHG ≈0.5¢, cash =1¢. Co-branded bonuses (Delta/United/Korean Air) apply mainly to that airline.</div>`;
+  box.innerHTML=html;
+}
+
+function esc(s){ return String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
+// ---- notes & to-dos per card ----
+function todoBlock(c){
+  const items=c.todos||[];
+  if(!items.length) return '';
+  return `<div class="todo-block"><label class="notes-label">✓ To-do</label>${items.map((t,i)=>
+    `<div class="todo"><input type="checkbox" ${t.done?'checked':''} onchange="toggleTodo('${c.id}',${i})">
+     <span class="${t.done?'todo-done':''}">${esc(t.text)}</span>
+     <button class="icon-btn" onclick="delTodo('${c.id}',${i})">🗑️</button></div>`).join('')}</div>`;
+}
+function saveNote(id,v){ const c=state.cards.find(x=>x.id===id); c.memo=v; save(); /* no re-render: keep focus */ }
+function addTodo(id){ const t=prompt('To-do (e.g. "downgrade before renewal"):'); if(!t)return; const c=state.cards.find(x=>x.id===id); c.todos=c.todos||[]; c.todos.push({text:t.trim(),done:false}); save(); render(); }
+function toggleTodo(id,i){ const c=state.cards.find(x=>x.id===id); c.todos[i].done=!c.todos[i].done; save(); render(); }
+function delTodo(id,i){ const c=state.cards.find(x=>x.id===id); c.todos.splice(i,1); save(); render(); }
+function toggleExpand(id){ expanded.has(id)?expanded.delete(id):expanded.add(id); render(); }
+function expandAll(v){ if(v) scopeCards().forEach(c=>expanded.add(c.id)); else expanded.clear(); render(); }
+
+// ---------- CRUD ----------
+function openCardModal(id){
+  const c=id?state.cards.find(x=>x.id===id):null;
+  document.getElementById('cardModalTitle').textContent=c?'Edit card':'Add card';
+  const os=new Set(owners()); os.add('Person1'); os.add('Person2');
+  document.getElementById('c_owner').innerHTML=Array.from(os).map(o=>`<option>${o}</option>`).join('');
+  document.getElementById('c_id').value=c?.id||'';
+  document.getElementById('c_owner').value=c?.owner||(activeOwner!=='All'?activeOwner:'Person1');
+  document.getElementById('c_name').value=c?.name||''; document.getElementById('c_issuer').value=c?.issuer||'';
+  document.getElementById('c_year').value=c?.year||''; document.getElementById('c_month').value=c?.month||'';
+  document.getElementById('c_fee').value=c?.fee??''; document.getElementById('c_note').value=c?.note||'';
+  document.getElementById('cardOverlay').classList.add('show');
+}
+function closeCardModal(){ document.getElementById('cardOverlay').classList.remove('show'); }
+function saveCard(){
+  const id=document.getElementById('c_id').value;
+  const d={owner:document.getElementById('c_owner').value.trim(),name:document.getElementById('c_name').value.trim(),
+    issuer:document.getElementById('c_issuer').value.trim(),year:parseInt(document.getElementById('c_year').value)||TODAY.getFullYear(),
+    month:parseInt(document.getElementById('c_month').value)||1,fee:parseFloat(document.getElementById('c_fee').value)||0,
+    note:document.getElementById('c_note').value.trim()};
+  if(!d.name){alert('Card name is required.');return;}
+  if(id){Object.assign(state.cards.find(x=>x.id===id),d);}
+  else{const nid='c_'+Date.now();state.cards.push({id:nid,checks:{},benefits:[],...d});expanded.add(nid);}
+  save(); closeCardModal(); render();
+}
+function deleteCard(id){ const c=state.cards.find(x=>x.id===id);
+  if(confirm(`Delete "${c.name}" (${c.owner})? This cannot be undone.`)){ state.cards=state.cards.filter(x=>x.id!==id); save(); render(); } }
+
+function openBenModal(cardId,idx){
+  const c=state.cards.find(x=>x.id===cardId); const b=(idx!=null)?c.benefits[idx]:null;
+  document.getElementById('benModalTitle').textContent=b?'Edit benefit':'Add benefit';
+  document.getElementById('b_cardId').value=cardId; document.getElementById('b_idx').value=idx!=null?idx:'';
+  document.getElementById('b_name').value=b?.name||''; document.getElementById('b_amount').value=b?.amount??'';
+  document.getElementById('b_cadence').value=b?.cadence||'monthly'; document.getElementById('b_note').value=b?.note||'';
+  document.getElementById('benOverlay').classList.add('show');
+}
+function closeBenModal(){ document.getElementById('benOverlay').classList.remove('show'); }
+function saveBenefit(){
+  const cardId=document.getElementById('b_cardId').value, idxRaw=document.getElementById('b_idx').value;
+  const c=state.cards.find(x=>x.id===cardId);
+  const d={name:document.getElementById('b_name').value.trim(),amount:parseFloat(document.getElementById('b_amount').value)||0,
+    cadence:document.getElementById('b_cadence').value,note:document.getElementById('b_note').value.trim()};
+  if(!d.name){alert('Benefit name is required.');return;}
+  c.benefits=c.benefits||[]; if(idxRaw!==''){c.benefits[parseInt(idxRaw)]=d;} else {c.benefits.push(d);}
+  expanded.add(cardId); save(); closeBenModal(); render();
+}
+function deleteBenefit(cardId,idx){ const c=state.cards.find(x=>x.id===cardId);
+  if(confirm(`Delete benefit "${c.benefits[idx].name}"?`)){ c.benefits.splice(idx,1); c.checks={}; save(); render(); } }
+
+// ---------- export / import ----------
+function exportData(){ const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='credit-cards-backup.json'; a.click(); }
+function importData(e){ const f=e.target.files[0]; if(!f)return; const r=new FileReader();
+  r.onload=()=>{ try{ const p=JSON.parse(r.result); if(!p.cards)throw 0; if(!p.settings)p.settings={alerts:false,notified:{}}; state=p; save(); render(); updateAlertBtn(); alert('Imported successfully.'); }catch(err){ alert('Could not import: invalid file.'); } };
+  r.readAsText(f); }
+
+// wiring
+document.querySelectorAll('#viewSeg button').forEach(b=>b.onclick=()=>{view=b.dataset.v;render();});
+document.getElementById('cardOverlay').addEventListener('click',e=>{if(e.target.id==='cardOverlay')closeCardModal();});
+document.getElementById('benOverlay').addEventListener('click',e=>{if(e.target.id==='benOverlay')closeBenModal();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeCardModal();closeBenModal();}});
+
+if('serviceWorker'in navigator && location.protocol.startsWith('http')){
+  navigator.serviceWorker.register('./sw.js').catch(e=>console.warn('SW register failed',e));
+}
+updateAlertBtn(); initSync();
+</script>
+</body>
+</html>

@@ -1,0 +1,1376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Family Monthly Budget Planner</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  :root{
+    --bg:#f2f7f4; --bg2:#dff0e6; --panel:#ffffff; --panel-2:#f4faf6; --border:#d3e3d8;
+    --text:#243830; --muted:#748b7e; --accent:#2e9e6b; --accent-soft:#8fd3ad;
+    --income:#2e9e6b; --spend:#e08a4a; --save:#3b82c4; --red:#d64545; --amber:#d98a1f;
+    --track:#e8efe9;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:linear-gradient(180deg,var(--bg2),var(--bg) 260px);color:var(--text);line-height:1.5;min-height:100vh;}
+  header{padding:22px 28px 14px;display:flex;flex-wrap:wrap;align-items:center;gap:16px;justify-content:space-between;}
+  h1{font-size:21px;margin:0;font-weight:750;}
+  .sub{color:var(--muted);font-size:13px;margin-top:2px;}
+  .wrap{max-width:1080px;margin:0 auto;padding:8px 28px 90px;}
+  .seg{display:inline-flex;background:var(--panel);border:1px solid var(--border);border-radius:11px;padding:3px;box-shadow:0 1px 2px rgba(40,90,60,.06);}
+  .seg button{padding:8px 15px;border-radius:8px;cursor:pointer;font-size:13.5px;color:var(--muted);border:none;background:none;font-weight:600;}
+  .seg button.active{background:var(--accent);color:#fff;}
+  button.btn{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:8px 14px;cursor:pointer;font-size:13px;font-weight:600;}
+  button.btn:hover{border-color:var(--accent);}
+  button.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:6px 0 18px;}
+  .spacer{flex:1;}
+
+  .summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;margin-bottom:20px;}
+  .stat{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:15px;box-shadow:0 1px 3px rgba(40,90,60,.07);}
+  .stat .label{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em;font-weight:600;}
+  .stat .value{font-size:23px;font-weight:750;margin-top:4px;}
+  .stat .value.income{color:var(--income);} .stat .value.spend{color:var(--spend);} .stat .value.save{color:var(--save);}
+  .stat .hint{font-size:11px;color:var(--muted);margin-top:2px;}
+
+  .month-nav{display:flex;align-items:center;gap:12px;margin-bottom:16px;}
+  .month-nav .mtitle{font-size:17px;font-weight:750;min-width:150px;text-align:center;}
+  .month-nav button{background:var(--panel);border:1px solid var(--border);border-radius:8px;width:34px;height:34px;cursor:pointer;font-size:15px;color:var(--text);}
+
+  .section{background:var(--panel);border:1px solid var(--border);border-radius:14px;margin-bottom:14px;overflow:hidden;box-shadow:0 1px 3px rgba(40,90,60,.07);}
+  .section h3{margin:0;padding:13px 16px;font-size:13px;text-transform:uppercase;letter-spacing:.05em;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);}
+  .section h3 .tot{font-weight:750;}
+  .sec-income h3{background:rgba(46,158,107,.08);color:var(--income);}
+  .sec-fixed h3{background:rgba(224,138,74,.08);color:var(--spend);}
+  .sec-flex h3{background:rgba(224,138,74,.06);color:var(--spend);}
+  .sec-save h3{background:rgba(59,130,196,.08);color:var(--save);}
+  .sec-payroll h3{background:rgba(116,139,126,.12);color:var(--muted);}
+
+  .line{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px dashed var(--border);}
+  .line:last-child{border-bottom:none;}
+  .line .cat{flex:1;min-width:0;}
+  .line .cat .nm{font-weight:600;font-size:14px;}
+  .line .cat .actual{font-size:12px;color:var(--muted);margin-top:1px;}
+  .line .amt-in{width:120px;}
+  .line .amt-in input{width:100%;text-align:right;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 10px;color:var(--text);font-size:14px;font-variant-numeric:tabular-nums;}
+  .line .amt-in input:focus{outline:none;border-color:var(--accent);}
+  .bar{height:6px;background:var(--track);border-radius:4px;margin-top:5px;overflow:hidden;}
+  .bar > span{display:block;height:100%;border-radius:4px;background:var(--accent);}
+  .bar > span.over{background:var(--red);}
+  .icon-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:2px 5px;border-radius:6px;}
+  .icon-btn:hover{background:var(--track);color:var(--text);}
+  .add-line{padding:10px 16px;}
+  .add-line button{font-size:12px;}
+
+  .bignum{font-variant-numeric:tabular-nums;}
+  .leftover{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 1px 3px rgba(40,90,60,.07);}
+  .leftover .big{font-size:26px;font-weight:800;}
+  .leftover .big.pos{color:var(--income);} .leftover .big.neg{color:var(--red);}
+
+  table.hist{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden;font-size:13px;box-shadow:0 1px 3px rgba(40,90,60,.07);}
+  table.hist th,table.hist td{padding:9px 12px;text-align:right;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums;}
+  table.hist th{background:var(--panel-2);color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.03em;}
+  table.hist td:first-child,table.hist th:first-child{text-align:left;}
+  table.hist tr:last-child td{border-bottom:none;font-weight:700;}
+
+  .advice-card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px 20px;margin-bottom:14px;box-shadow:0 1px 3px rgba(40,90,60,.07);}
+  .advice-card h3{margin:0 0 8px;font-size:15px;}
+  .advice-card p{margin:6px 0;font-size:14px;}
+  .advice-card .rule{display:flex;gap:10px;align-items:center;margin:8px 0;}
+  .advice-card .rule .rbar{flex:1;height:22px;border-radius:6px;background:var(--track);overflow:hidden;display:flex;}
+  .advice-card .rule .rbar i{height:100%;display:block;}
+  .badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;}
+  .badge.good{background:rgba(46,158,107,.15);color:var(--income);}
+  .badge.warn{background:rgba(217,138,31,.15);color:var(--amber);}
+  .badge.bad{background:rgba(214,69,69,.13);color:var(--red);}
+  .footer-note{color:var(--muted);font-size:12px;margin-top:24px;text-align:center;line-height:1.7;}
+  .coach-banner{border-radius:14px;padding:14px 16px;margin-bottom:18px;border:1px solid var(--border);box-shadow:0 1px 3px rgba(40,90,60,.07);}
+  .coach-banner.has-warn{background:#fff6ea;border-color:#f0c893;}
+  .coach-banner.ok{background:#eef7f1;border-color:var(--accent-soft);}
+  .coach-top{display:flex;justify-content:space-between;align-items:center;font-weight:750;font-size:14px;margin-bottom:8px;}
+  .coach-toggle{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;color:var(--text);}
+  .coach-item{display:flex;gap:9px;align-items:flex-start;font-size:13px;padding:4px 0;line-height:1.5;}
+  .coach-item.warn>span:first-child{color:var(--red);}
+  .coach-item.win>span:first-child{color:var(--income);}
+  .coach-item.tip>span:first-child{color:var(--save);}
+  #fabAdd{position:fixed;right:22px;bottom:22px;width:58px;height:58px;border-radius:50%;border:none;
+    background:var(--accent);color:#fff;font-size:30px;font-weight:400;cursor:pointer;box-shadow:0 4px 14px rgba(46,158,107,.45);z-index:40;line-height:1;}
+  #fabAdd:hover{filter:brightness(1.05);}
+  .qa-overlay{position:fixed;inset:0;background:rgba(30,50,40,.5);display:none;align-items:center;justify-content:center;z-index:60;padding:20px;}
+  .qa-overlay.show{display:flex;}
+  .qa-modal{background:var(--panel);border:1px solid var(--border);border-radius:16px;width:100%;max-width:440px;padding:22px;max-height:92vh;overflow-y:auto;box-shadow:0 12px 40px rgba(30,70,50,.28);}
+  .qa-modal h2{margin:0 0 16px;font-size:18px;}
+  .qa-row{display:flex;gap:12px;}
+  .qa-field{margin-bottom:13px;flex:1;}
+  .qa-field.qa-amt{flex:1.3;}
+  .qa-field label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);font-weight:600;margin-bottom:4px;}
+  .qa-field input,.qa-field select{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:10px 11px;color:var(--text);font-size:15px;}
+  .qa-field input:focus,.qa-field select:focus{outline:none;border-color:var(--accent);}
+  .qa-quickcats{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 14px;}
+  .qa-chip{font-size:12px;font-weight:600;padding:5px 10px;border-radius:20px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);cursor:pointer;}
+  .qa-chip:hover,.qa-chip.on{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .qa-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;margin-top:4px;}
+  .qa-recent{margin-top:16px;border-top:1px dashed var(--border);padding-top:12px;}
+  .qa-recent .qa-rtitle{font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);font-weight:600;margin-bottom:6px;}
+  .qa-txn{display:flex;align-items:center;gap:8px;font-size:13px;padding:5px 0;border-bottom:1px dashed var(--border);}
+  .qa-txn:last-child{border-bottom:none;}
+  .qa-txn .qa-tamt{font-weight:700;font-variant-numeric:tabular-nums;}
+  .qa-txn .qa-tcat{flex:1;color:var(--muted);}
+  .mini{font-size:12px;color:var(--muted);}
+  .txlist{background:var(--panel-2);border-bottom:1px dashed var(--border);padding:2px 16px 9px 32px;}
+  .txrow{display:flex;align-items:center;gap:10px;font-size:12.5px;padding:4px 0;border-bottom:1px dotted var(--border);}
+  .txrow:last-child{border-bottom:none;}
+  .txrow .txd{color:var(--muted);width:44px;font-variant-numeric:tabular-nums;}
+  .txrow .txn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .txrow .txa{font-weight:700;font-variant-numeric:tabular-nums;}
+  .txcount{display:inline-block;font-size:11px;font-weight:700;color:var(--muted);background:var(--track);border-radius:10px;padding:0 7px;margin-left:5px;}
+  .nm .tw{color:var(--muted);font-size:11px;margin-right:2px;}
+  .io{display:flex;gap:8px;flex-shrink:0;}
+  .io .fld{display:flex;flex-direction:column;}
+  .io .fld label{font-size:9px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);text-align:center;margin-bottom:2px;font-weight:600;}
+  .io .fld input{width:84px;text-align:right;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:6px 8px;color:var(--text);font-size:13.5px;font-variant-numeric:tabular-nums;}
+  .io .fld input:focus{outline:none;border-color:var(--accent);}
+  .io .fld.plan input{background:var(--panel-2);color:var(--muted);}
+  .ovr{display:inline-block;font-size:9px;font-weight:700;color:var(--save);background:rgba(59,130,196,.13);border-radius:8px;padding:0 5px;margin-left:5px;vertical-align:middle;}
+</style>
+</head>
+<body>
+<div class="overlay" id="loginOverlay" style="position:fixed;inset:0;background:rgba(30,50,40,.5);display:none;align-items:center;justify-content:center;z-index:50;padding:20px;">
+  <div style="background:var(--panel);border:1px solid var(--border);border-radius:16px;width:100%;max-width:400px;padding:24px;text-align:center;box-shadow:0 12px 40px rgba(30,70,50,.25);">
+    <div style="font-size:38px;margin-bottom:6px;">📊</div>
+    <h2 style="margin:0 0 4px;">Family Budget</h2>
+    <div class="sub" style="margin-bottom:18px;">Sign in to view the shared budget</div>
+    <div style="text-align:left;margin-bottom:12px;"><label class="mini">Email</label><input id="lg_email" type="email" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:14px;" placeholder="you@example.com"></div>
+    <div style="text-align:left;margin-bottom:8px;"><label class="mini">Password</label><input id="lg_pass" type="password" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-size:14px;" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div id="lg_err" style="color:var(--red);font-size:13px;min-height:18px;margin-bottom:10px;"></div>
+    <button class="btn primary" style="width:100%;padding:11px;" onclick="doLogin()">Sign in</button>
+    <div class="footer-note" style="margin-top:14px;">Same family logins as the card tracker. Budget data is stored separately &amp; privately.</div>
+  </div>
+</div>
+<header>
+  <div>
+    <h1>📊 Family Monthly Budget Planner</h1>
+    <div class="sub">Built from your imported statements · <b id="buildVer">build —</b></div>
+  </div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+    <span id="syncBadge" style="font-size:12px;font-weight:600;padding:5px 10px;border-radius:20px;background:var(--panel-2);color:var(--muted);border:1px solid var(--border);">⚪ Offline</span>
+    <button class="btn" onclick="exportData()">Export</button>
+    <button class="btn" onclick="document.getElementById('importFile').click()">Import</button>
+    <input type="file" id="importFile" accept="application/json" style="display:none" onchange="importData(event)">
+    <button class="btn" onclick="syncFromEmailSheet()" id="emailSyncBtn" title="Pull new transactions from your email→sheet">📧 Sync email</button>
+    <button class="btn" onclick="document.getElementById('csvFile').click()" id="csvBtn" title="Import a downloaded bank CSV (Chase, Amex, Capital One…)">📄 Import CSV</button>
+    <input type="file" id="csvFile" accept=".csv,text/csv" multiple style="display:none" onchange="importBankCSV(event)">
+    <button class="btn" onclick="document.getElementById('pcFile').click()" id="pcBtn" title="Import UW payslip PDFs — fills retirement (403b + Roth + WRS) per month">📄 Import paychecks</button>
+    <input type="file" id="pcFile" accept="application/pdf,.pdf" multiple style="display:none" onchange="importPaychecks(event)">
+    <button class="btn" onclick="recategorizeImported()" title="Re-sort already-imported transactions into the right budget lines">🔄 Fix categories</button>
+    <button class="btn" onclick="purgeCardPayments()" title="Remove already-imported card-payment/transfer rows that were counted as spending by an older bug">💳 Remove card payments</button>
+    <button class="btn" onclick="clearImportedSpending()" title="Remove all CSV/email-imported transactions (keeps hand-logged ones)">🧹 Clear imported</button>
+    <button class="btn" onclick="rebuildImported()" title="Back up, clear imported rows, and re-import cleanly with the corrected refund/category logic">♻️ Rebuild imported</button>
+    <button class="btn primary" onclick="openQuickAdd()">＋ Log spending</button>
+    <button class="btn" onclick="resetPlan()">Reset to recommended</button>
+    <button class="btn" id="logoutBtn" onclick="doLogout()" style="display:none;">Sign out</button>
+  </div>
+</header>
+
+<!-- floating quick-add button (always reachable) -->
+<button id="fabAdd" onclick="openQuickAdd()" title="Log spending">＋</button>
+
+<!-- quick-add modal -->
+<div class="qa-overlay" id="qaOverlay">
+  <div class="qa-modal">
+    <h2 id="qaTitle">Log spending</h2>
+    <div class="qa-row">
+      <div class="qa-field qa-amt"><label>Amount $</label><input id="qa_amt" type="number" inputmode="decimal" step="0.01" min="0" placeholder="62.40" onkeydown="if(event.key==='Enter')saveQuickAdd()"></div>
+      <div class="qa-field"><label>Date</label><input id="qa_date" type="date"></div>
+    </div>
+    <div class="qa-field"><label>Category</label><select id="qa_cat"></select></div>
+    <div class="qa-field"><label>Note (optional)</label><input id="qa_note" placeholder="e.g. Trader Joe's" onkeydown="if(event.key==='Enter')saveQuickAdd()"></div>
+    <div class="qa-quickcats" id="qa_quick"></div>
+    <div class="qa-actions">
+      <button class="btn" onclick="closeQuickAdd()">Cancel</button>
+      <button class="btn primary" onclick="saveQuickAdd(true)">Save &amp; add another</button>
+      <button class="btn primary" onclick="saveQuickAdd()">Save</button>
+    </div>
+    <div id="qa_recent" class="qa-recent"></div>
+  </div>
+</div>
+
+<!-- move-to-category modal (tap 📂 on a transaction) -->
+<div class="qa-overlay" id="mvOverlay">
+  <div class="qa-modal">
+    <h2>Move to category</h2>
+    <div class="qa-field"><label>Category</label><select id="mv_cat"></select></div>
+    <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;margin:12px 2px 4px;color:var(--muted);cursor:pointer;">
+      <input type="checkbox" id="mv_remember" checked style="margin-top:2px;">
+      <span>Always categorize <b id="mv_merchant" style="color:var(--text);"></b> this way (updates matching past &amp; future transactions)</span>
+    </label>
+    <div class="qa-actions">
+      <button class="btn" onclick="closeMoveModal()">Cancel</button>
+      <button class="btn primary" onclick="applyMove()">Move</button>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="toolbar">
+    <div class="seg" id="viewSeg">
+      <button data-v="plan">📝 Budget Plan</button>
+      <button data-v="weekly">📅 This Week</button>
+      <button data-v="track">✅ This Month</button>
+      <button data-v="history">📈 12-Month History</button>
+      <button data-v="advice">💡 Advice</button>
+    </div>
+    <div class="spacer"></div>
+  </div>
+  <div id="coachBanner" class="coach-banner" style="display:none;"></div>
+  <div id="main"></div>
+  <div class="footer-note">
+    Figures are derived from your uploaded statements and processed <b>locally only</b> — nothing is uploaded.
+    Income = payroll net take-home; spending = credit-card purchases + known fixed bills. Adjust any line to fit reality.
+  </div>
+</div>
+
+<script>
+const STORAGE_KEY='budgetPlanner_v6';
+const APP_BUILD='privacy-gate-8';   // bump each deploy; shown in header to confirm the live version
+try{document.getElementById('buildVer').textContent='build '+APP_BUILD;}catch(e){}
+// Set this to the second earner's first name (lowercase) to route their payslip PDFs to the
+// "j" income line on import. Leave blank to disable per-person detection (all payslips → "han" line).
+const PAYSLIP_NAME_MATCH='';
+
+// ===== Firebase live sync — reuses your project, SEPARATE private path =====
+const FIREBASE_CONFIG={
+  apiKey:"AIzaSyDD39fG2m-8kYHTJ2ZJ_DbicUjOk9y31Aw",
+  authDomain:"creditcard-7e0fd.firebaseapp.com",
+  databaseURL:"https://creditcard-7e0fd-default-rtdb.firebaseio.com",
+  projectId:"creditcard-7e0fd",
+  messagingSenderId:"454836236559",
+  appId:"1:454836236559:web:dddb83b1b883b58a8b4e7a"
+};
+const SYNC_PATH='family-budget/shared';   // walled off from the card tracker's path
+// ===== Email→Sheet auto-import: paste your published-CSV URL (see SETUP-EMAIL-TRACKING.md) =====
+const SHEET_CSV_URL='https://docs.google.com/spreadsheets/d/e/2PACX-1vT4tMmnsLJtV4OM_NQb615U_Xl5nyJimR0ju4endKPr-lVxDInmX2InN6MhVTpoFnbVDso1k6PDWDY4/pub?gid=1560560552&single=true&output=csv';   // e.g. https://docs.google.com/spreadsheets/d/e/XXXX/pub?gid=0&single=true&output=csv
+// Map the sheet's Category text → which budget line it feeds. Edit to match your plan lines.
+const SHEET_CAT_MAP={
+  'Housing':'wisconsin:0','Utilities':'wisconsin:1','Internet / phone':'wisconsin:2',
+  'Daycare':'fixed:0','Tuition / school':'save:0','Insurance':'fixed:2','Groceries':'flex:5',
+  'Dining & takeout':'flex:0','Shopping & personal':'flex:1','Transportation & gas':'flex:2',
+  'Travel':'flex:3','Subscriptions':'flex:4','Uncategorized':'flex:4'
+};
+let db=null,auth=null,currentUser=null,syncReady=false,applyingRemote=false,saveTimer=null,dbStarted=false;
+function syncConfigured(){return !!(FIREBASE_CONFIG.apiKey&&FIREBASE_CONFIG.databaseURL&&window.firebase);}
+
+// ============================================================
+//  Generic starter baseline — a blank template. Sign in to load your family's
+//  real plan & history from shared sync; these numbers never contain personal data.
+// ============================================================
+const ACTUALS = {
+  // monthly credit-card purchases (real consumption) by month
+  ccByMonth:{},
+  netPayByMonth:{},
+  jPayByMonth:{},
+  retireByMonth:{},
+  avgNetPay:0, avgJPay:0, avgRetire:0, avgCC:0, medianCC:0,
+};
+
+// Recommended starting plan (generic template — edit any line to fit your household)
+function recommendedPlan(){
+  return {
+    income:[
+      {nm:'Income 1 — take-home pay', amt:0},
+      {nm:'Income 2 — take-home pay', amt:0},
+      {nm:'Seasonal / secondary income', amt:0},
+      {nm:'Other income / reimbursements', amt:0},
+    ],
+    wisconsin:[  // Home 1 (primary residence)
+      {nm:'Mortgage / rent', amt:0},
+      {nm:'Utilities', amt:0},
+      {nm:'Internet / phone', amt:0},
+    ],
+    seattle:[    // Home 2 (secondary / seasonal residence — set $0 when not in use)
+      {nm:'Secondary home rent', amt:0},
+    ],
+    fixed:[   // shared essentials
+      {nm:'Childcare / school', amt:0},
+      {nm:'Car payment', amt:0},
+      {nm:'Life insurance', amt:0},
+      {nm:'Auto insurance', amt:0},
+    ],
+    flex:[    // variable lifestyle spending
+      {nm:'Dining & takeout', amt:0},
+      {nm:'Shopping & personal', amt:0},
+      {nm:'Transportation & gas', amt:0},
+      {nm:'Travel & entertainment', amt:0},
+      {nm:'Misc / other', amt:0},
+      {nm:'Groceries', amt:0},
+    ],
+    save:[    // funded FROM take-home
+      {nm:'Seasonal savings fund', amt:0},
+      {nm:'Emergency fund', amt:0},
+      {nm:'Roth IRA / extra retirement (personal, beyond payroll)', amt:0},
+      {nm:'Travel sinking fund', amt:0},
+    ],
+    payroll:[ // pre-tax paycheck deductions — funded from GROSS, tracked apart from take-home spending
+      {nm:'Retirement (401k/403b + match)', amt:0},
+      {nm:'Health & benefits (medical/dental/vision/life)', amt:0},
+    ],
+  };
+}
+const HOUSING_SECS=['wisconsin','seattle'];
+const SPEND_SECS=['wisconsin','seattle','fixed','flex','save'];
+// Retirement withheld from paycheck BEFORE take-home is NOT a line that spends take-home.
+// It's tracked separately as pre-paycheck savings. See the Advice tab.
+// Your own retirement contribution withheld pre-tax, per month. Adjust to your real payslip figure.
+const AUTO_RETIREMENT = 0;
+// Employer retirement match/contribution, per month — not your money, not from take-home,
+// shown for context only. Adjust to your real payslip figure.
+const EMPLOYER_RETIREMENT = 0;
+
+let state=load();
+let view='plan';
+let curMonth=currentMonthKey();
+function isoOf(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+function mondayOf(dateStr){const d=new Date(dateStr+'T00:00');const day=d.getDay();d.setDate(d.getDate()+(day===0?-6:1-day));return isoOf(d);}
+let curWeekStart=mondayOf(todayISO());
+
+function currentMonthKey(){
+  // clamp to the data window if outside; default to latest data month
+  return '2026-06';
+}
+function load(){
+  try{const raw=localStorage.getItem(STORAGE_KEY);if(raw)return migrateState(JSON.parse(raw));}catch(e){}
+  const s={plan:recommendedPlan(), actualsByMonth:{}, planOverrides:{}, meta:{created:'2026-07'}};
+  save(s);return s;
+}
+// One-time data migrations: ensure planOverrides exists, and move a "Groceries" line out of
+// Fixed into Flexible (remapping its imported amounts) so old saved data matches the new layout.
+function migrateState(s){
+  s=s||{}; s.plan=s.plan||recommendedPlan(); s.actualsByMonth=s.actualsByMonth||{}; s.planOverrides=s.planOverrides||{}; s.paychecks=s.paychecks||{}; s.meta=s.meta||{}; s.catRules=s.catRules||{};
+  s.plan.flex=s.plan.flex||[]; s.plan.fixed=s.plan.fixed||[];
+  // Groceries: fixed → flex (only when it's the last fixed line, so no index shift)
+  const gi=s.plan.fixed.findIndex(x=>/grocer/i.test((x&&x.nm)||''));
+  if(gi>=0&&gi===s.plan.fixed.length-1){
+    const oldId='fixed:'+gi, g=s.plan.fixed.splice(gi,1)[0];
+    s.plan.flex.push(g);
+    remapLineId(s,oldId,'flex:'+(s.plan.flex.length-1));
+  }
+  // Pre-tax payroll section (retirement + health/benefits) — funded from gross, tracked separately.
+  if(!s.plan.payroll||!s.plan.payroll.length){
+    s.plan.payroll=[{nm:'Retirement (403b + Roth + WRS)',amt:1455},{nm:'Health & benefits (medical/dental/vision/life)',amt:200}];
+  }
+  // One-time: retire the old auto-filled retirement out of the Savings section (it now lives in payroll).
+  if(!s.meta.payrollMigrated){
+    const sr=(s.plan.save||[]).findIndex(x=>/roth ira|extra retire|retirement/i.test(x.nm));
+    if(sr>=0){const srId='save:'+sr;Object.values(s.actualsByMonth).forEach(rec=>{if(rec[srId]!=null)delete rec[srId];});}
+    s.meta.payrollMigrated=true;
+  }
+  // One-time: the Savings "Roth IRA / extra retirement" line double-plans the payroll 403b/Roth,
+  // so zero its plan and relabel it for genuinely-separate personal contributions only.
+  if(!s.meta.retLineCleaned){
+    const sr=(s.plan.save||[]).findIndex(x=>/roth ira|extra retire/i.test(x.nm));
+    if(sr>=0){s.plan.save[sr].nm='Roth IRA / extra retirement (personal, beyond payroll)';s.plan.save[sr].amt=0;}
+    s.meta.retLineCleaned=true;
+  }
+  // One-time: split the "New York Life + auto" line — auto insurance (Progressive) is separate.
+  if(!s.meta.autoInsSplit){
+    const fx=s.plan.fixed||[];
+    const nyl=fx.findIndex(x=>/new york life/i.test(x.nm));
+    if(nyl>=0)fx[nyl].nm='Insurance — New York Life (life)';
+    if(fx.findIndex(x=>/auto insurance|progressive/i.test(x.nm))<0)fx.push({nm:'Auto insurance (Progressive)',amt:150});
+    s.meta.autoInsSplit=true;
+  }
+  // Rename the old "Installment loan (UWCU)" line to "Car installment" (idempotent: guarded by old name).
+  const il=(s.plan.fixed||[]).findIndex(x=>/^installment loan/i.test((x&&x.nm)||''));
+  if(il>=0)s.plan.fixed[il].nm='Car installment (UWCU)';
+  // Ensure an "Other income / reimbursements" line exists (captured checking deposits roll here).
+  s.plan.income=s.plan.income||[];
+  if(s.plan.income.findIndex(x=>/other income|reimburse/i.test((x&&x.nm)||''))<0)s.plan.income.push({nm:'Other income / reimbursements',amt:0});
+  // One-time: re-key existing (Han-only) paychecks to the new who|date|net scheme so they dedupe.
+  if(!s.meta.paycheckReKey&&Object.keys(s.paychecks).length){
+    const np={};Object.keys(s.paychecks).forEach(k=>{const p=s.paychecks[k];p.who=p.who||'han';np[p.who+'|'+p.date+'|'+(Number(p.net)||0).toFixed(2)]=p;});
+    s.paychecks=np;s.meta.paycheckReKey=true;
+  }
+  if(Object.keys(s.paychecks).length)rebuildPaychecks(s);
+  return s;
+}
+// Which payroll lines hold retirement vs health/benefits (by name, robust to reordering).
+function payrollLineIds(s){
+  const pay=(s.plan&&s.plan.payroll)||[];
+  const ret=pay.findIndex(x=>/retire|403|roth|wrs/i.test(x.nm));
+  const ben=pay.findIndex(x=>/health|benefit|medical|dental|vision|insurance/i.test(x.nm));
+  return {ret:'payroll:'+(ret>=0?ret:0), ben:'payroll:'+(ben>=0?ben:1)};
+}
+// Rebuild paycheck transactions (retirement + benefits) and payroll monthly totals from stored paychecks.
+function rebuildPaychecks(s){
+  const ids=payrollLineIds(s);
+  s.txns=(s.txns||[]).filter(t=>t.src!=='paycheck');
+  const retByM={},benByM={};
+  Object.keys(s.paychecks).forEach(k=>{const p=s.paychecks[k];
+    retByM[p.month]=(retByM[p.month]||0)+(Number(p.retirement)||0);
+    benByM[p.month]=(benByM[p.month]||0)+(Number(p.benefits)||0);
+    s.txns.push({amt:Number(p.retirement)||0,id:ids.ret,date:p.date,note:`Paycheck retirement — 403b $${p.r403} + Roth $${p.roth} + WRS $${p.wrs}`,ts:p.date,src:'paycheck',key:k+'|r'});
+    if(Number(p.benefits)>0)s.txns.push({amt:Number(p.benefits),id:ids.ben,date:p.date,note:'Paycheck benefits — health/dental/vision/life',ts:p.date,src:'paycheck',key:k+'|b'});
+  });
+  Object.keys(retByM).forEach(mk=>{s.actualsByMonth[mk]=s.actualsByMonth[mk]||{};s.actualsByMonth[mk][ids.ret]=Math.round(retByM[mk]*100)/100;});
+  Object.keys(benByM).forEach(mk=>{s.actualsByMonth[mk]=s.actualsByMonth[mk]||{};if(benByM[mk]>0)s.actualsByMonth[mk][ids.ben]=Math.round(benByM[mk]*100)/100;});
+  // Net take-home per month, routed to the earner's income line (Han vs J by payslip name).
+  const inc=s.plan.income||[];
+  const hanId='income:'+Math.max(0,inc.findIndex(x=>/\bhan\b|hanbaek|take-?home/i.test((x&&x.nm)||'')));
+  const jUwIdx=inc.findIndex(x=>/uw payroll/i.test((x&&x.nm)||''));
+  const jUwId='income:'+(jUwIdx>=0?jUwIdx:1);
+  const netByLine={};   // {lineId:{month:sum}}
+  Object.keys(s.paychecks).forEach(k=>{const p=s.paychecks[k];if(!(Number(p.net)>0))return;
+    const lid=(p.who==='j')?jUwId:hanId;
+    netByLine[lid]=netByLine[lid]||{}; netByLine[lid][p.month]=(netByLine[lid][p.month]||0)+Number(p.net);
+    s.txns.push({amt:Number(p.net),id:lid,date:p.date,note:(p.who==='j'?'J UW paycheck (net)':'Paycheck net take-home'),ts:p.date,src:'paycheck',key:k+'|n'});
+  });
+  Object.keys(netByLine).forEach(lid=>Object.keys(netByLine[lid]).forEach(mk=>{s.actualsByMonth[mk]=s.actualsByMonth[mk]||{};s.actualsByMonth[mk][lid]=Math.round(netByLine[lid][mk]*100)/100;}));
+}
+function remapLineId(s,oldId,newId){
+  Object.values(s.actualsByMonth||{}).forEach(rec=>{if(rec[oldId]!=null){rec[newId]=Math.round(((Number(rec[newId])||0)+(Number(rec[oldId])||0))*100)/100;delete rec[oldId];}});
+  (s.txns||[]).forEach(t=>{if(t.id===oldId)t.id=newId;});
+  Object.values(s.planOverrides||{}).forEach(o=>{if(o[oldId]!=null){o[newId]=o[oldId];delete o[oldId];}});
+}
+function save(s){
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(s||state));
+  if(db&&syncReady&&!applyingRemote){
+    clearTimeout(saveTimer);
+    saveTimer=setTimeout(()=>{state.updatedAt=Date.now();localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+      db.ref(SYNC_PATH).set(state).catch(e=>console.warn('push failed',e));},400);
+  }
+}
+function setSyncBadge(st){const b=document.getElementById('syncBadge');if(!b)return;
+  const m={off:['⚪ Offline','var(--muted)'],connecting:['🟡 Connecting…','var(--amber)'],live:['🟢 Live sync on','var(--accent)'],error:['🔴 Sync error','var(--red)']};
+  const[t,c]=m[st]||m.off;b.textContent=t;b.style.color=c;}
+function initSync(){
+  if(!syncConfigured()){setSyncBadge('off');render();return;}
+  try{setSyncBadge('connecting');firebase.initializeApp(FIREBASE_CONFIG);auth=firebase.auth();
+    auth.onAuthStateChanged(u=>{currentUser=u;const lo=document.getElementById('logoutBtn');
+      if(u){document.getElementById('loginOverlay').style.display='none';if(lo)lo.style.display='';startDb();render();}
+      else{if(lo)lo.style.display='none';document.getElementById('loginOverlay').style.display='flex';document.getElementById('main').innerHTML='';}});
+  }catch(e){console.warn(e);setSyncBadge('error');render();}
+}
+function doLogin(){const email=document.getElementById('lg_email').value.trim(),pass=document.getElementById('lg_pass').value,err=document.getElementById('lg_err');err.textContent='';
+  if(!email||!pass){err.textContent='Enter email and password.';return;}
+  auth.signInWithEmailAndPassword(email,pass).catch(e=>{err.textContent=/invalid-credential|wrong-password|user-not-found/.test(e.code||'')?'Wrong email or password.':(e.message||'Sign-in failed.');});}
+function doLogout(){if(auth)auth.signOut().then(()=>location.reload());}
+function startDb(){if(dbStarted)return;dbStarted=true;db=firebase.database();
+  db.ref('.info/connected').on('value',s=>{if(syncReady)setSyncBadge(s.val()?'live':'connecting');});
+  const ref=db.ref(SYNC_PATH);
+  ref.once('value').then(snap=>{const r=snap.val();
+    if(r&&r.plan){const lt=state.updatedAt||0,rt=r.updatedAt||0;if(rt>=lt)applyRemote(r);else ref.set(state);}
+    else ref.set(state);
+    syncReady=true;setSyncBadge('live');
+    ref.on('value',s=>{const rr=s.val();if(rr&&rr.plan&&rr.updatedAt!==state.updatedAt)applyRemote(rr);});
+  }).catch(e=>{console.warn(e);setSyncBadge('error');});}
+function applyRemote(r){applyingRemote=true;state=migrateState(r);localStorage.setItem(STORAGE_KEY,JSON.stringify(state));applyingRemote=false;render();}
+function fmt(n){return '$'+Math.round(n).toLocaleString();}
+function esc(s){return String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));}
+
+// ---------- QUICK-ADD: log a transaction, drop it into the right month ----------
+const QUICK_CHIPS=['flex:0','flex:1','flex:2','flex:5','wisconsin:0','seattle:0']; // dining, shopping, transport, groceries, WI mortgage, Seattle
+function planLineOptions(){
+  const secLabel={wisconsin:'🏡 Home 1',seattle:'🏖️ Home 2',fixed:'Fixed',flex:'Flexible',save:'Savings'};
+  const opts=[];
+  SPEND_SECS.forEach(sec=>{(state.plan[sec]||[]).forEach((it,i)=>opts.push({id:sec+':'+i,label:`${secLabel[sec]} — ${it.nm}`}));});
+  return opts;
+}
+function todayISO(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+function openQuickAdd(){
+  const opts=planLineOptions();
+  document.getElementById('qa_cat').innerHTML=opts.map(o=>`<option value="${o.id}">${esc(o.label)}</option>`).join('');
+  // quick chips for common categories
+  const chipEls=QUICK_CHIPS.map(id=>{const o=opts.find(x=>x.id===id);return o?`<span class="qa-chip" onclick="document.getElementById('qa_cat').value='${o.id}';document.querySelectorAll('.qa-chip').forEach(c=>c.classList.remove('on'));this.classList.add('on')">${esc(o.label.replace(/^.*— /,''))}</span>`:'';}).join('');
+  document.getElementById('qa_quick').innerHTML=chipEls;
+  document.getElementById('qa_amt').value='';
+  document.getElementById('qa_note').value='';
+  document.getElementById('qa_date').value=todayISO();
+  document.getElementById('qaOverlay').classList.add('show');
+  renderRecentTxns();
+  setTimeout(()=>document.getElementById('qa_amt').focus(),50);
+}
+function closeQuickAdd(){document.getElementById('qaOverlay').classList.remove('show');}
+function monthKeyOf(iso){const[y,m]=iso.split('-');return `${y}-${m}`;}
+function saveQuickAdd(again){
+  const amt=parseFloat(document.getElementById('qa_amt').value);
+  const id=document.getElementById('qa_cat').value;
+  const date=document.getElementById('qa_date').value||todayISO();
+  const note=document.getElementById('qa_note').value.trim();
+  if(!amt||amt<=0){alert('Enter an amount.');return;}
+  const mk=monthKeyOf(date);
+  // 1) append to transaction log
+  state.txns=state.txns||[];
+  state.txns.push({amt,id,date,note,ts:date});
+  // 2) increment that line's monthly actual total
+  state.actualsByMonth[mk]=state.actualsByMonth[mk]||{};
+  const cur=Number(state.actualsByMonth[mk][id])||0;
+  state.actualsByMonth[mk][id]=Math.round((cur+amt)*100)/100;
+  save();
+  if(again){
+    document.getElementById('qa_amt').value='';document.getElementById('qa_note').value='';
+    renderRecentTxns();
+    document.getElementById('qa_amt').focus();
+  } else { closeQuickAdd(); }
+  if(view==='track'||view==='plan') render(); else renderCoachBanner();
+}
+function renderRecentTxns(){
+  const box=document.getElementById('qa_recent');if(!box)return;
+  const opts=planLineOptions();
+  const label=id=>{const o=opts.find(x=>x.id===id);return o?o.label:id;};
+  const list=(state.txns||[]).slice(-6).reverse();
+  if(!list.length){box.innerHTML='';return;}
+  box.innerHTML=`<div class="qa-rtitle">Recent (tap 🗑 to undo)</div>`+list.map((t)=>
+    `<div class="qa-txn"><span class="qa-tamt">${fmt(t.amt)}</span><span class="qa-tcat">${esc(label(t.id))}${t.note?' · '+esc(t.note):''}</span><span style="color:var(--muted);font-size:11px">${t.date.slice(5)}</span><button class="btn" style="padding:2px 7px;font-size:12px" onclick="undoTxn('${t.ts}',${t.amt},'${t.id}')">🗑</button></div>`
+  ).join('');
+}
+function undoTxn(ts,amt,id){
+  // remove the most recent matching txn
+  const idx=[...(state.txns||[])].map((t,i)=>({t,i})).reverse().find(o=>o.t.ts===ts&&o.t.amt===amt&&o.t.id===id);
+  if(!idx)return;
+  state.txns.splice(idx.i,1);
+  const mk=monthKeyOf(ts);
+  if(state.actualsByMonth[mk]){const cur=Number(state.actualsByMonth[mk][id])||0;const nv=Math.round((cur-amt)*100)/100;if(nv>0.005)state.actualsByMonth[mk][id]=nv;else delete state.actualsByMonth[mk][id];}
+  save();renderRecentTxns();
+  if(view==='track'||view==='plan')render();else renderCoachBanner();
+}
+
+// ---------- Email → Sheet auto-import ----------
+function parseCSV(text){
+  const rows=[];let row=[],cur='',q=false;
+  for(let i=0;i<text.length;i++){const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c; }
+    else { if(c==='"')q=true; else if(c===','){row.push(cur);cur='';} else if(c==='\n'||c==='\r'){ if(cur!==''||row.length){row.push(cur);rows.push(row);row=[];cur='';} } else cur+=c; }
+  }
+  if(cur!==''||row.length){row.push(cur);rows.push(row);}
+  return rows;
+}
+async function syncFromEmailSheet(){
+  const btn=document.getElementById('emailSyncBtn');
+  if(!SHEET_CSV_URL){ alert('Email sync isn’t set up yet.\n\nOpen SETUP-EMAIL-TRACKING.md and paste your published-sheet CSV URL into SHEET_CSV_URL near the top of the script.'); return; }
+  if(btn){btn.textContent='📧 Syncing…';btn.disabled=true;}
+  try{
+    const res=await fetch(SHEET_CSV_URL+((SHEET_CSV_URL.includes('?')?'&':'?')+'_t='+Date.now()));
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const rows=parseCSV(await res.text());
+    if(rows.length<2){ alert('Sheet has no transactions yet.'); return; }
+    const head=rows[0].map(h=>h.trim().toLowerCase());
+    const ci={date:head.indexOf('date'),amt:head.indexOf('amount'),merch:head.indexOf('merchant'),cat:head.indexOf('category'),id:head.indexOf('emailid')};
+    state.txns=state.txns||[];
+    const seen=new Set(state.txns.filter(t=>t.src==='email').map(t=>t.eid));   // email IDs already synced
+    const existingDA=new Set(state.txns.map(t=>dupKey(t.date,t.amt)));          // date+amount, vs CSV overlap
+    let added=0,refunds=0,skipped=0;
+    for(let r=1;r<rows.length;r++){
+      const row=rows[r]; if(!row||row.length<2) continue;
+      const eid=ci.id>=0?(row[ci.id]||'').trim():'';
+      const merch=(ci.merch>=0?(row[ci.merch]||''):'').trim();
+      const catText=ci.cat>=0?(row[ci.cat]||'').trim():'';
+      const date=(row[ci.date]||todayISO()).slice(0,10);
+      // Refund/credit (negative amount, or "credit from…/refund/return" text) → NEGATIVE spending,
+      // so it subtracts from that category instead of adding to it.
+      let amt=parseMoney(row[ci.amt]);
+      const isRefund=amt<0||/credit from|\brefund\b|\breturn\b|statement credit|reversal/i.test(merch+' '+catText);
+      amt=isRefund?-Math.abs(amt):Math.abs(amt);
+      if(!amt){skipped++;continue;}
+      // Dedup by email ID (unique per email); update the set IN-loop so the same email appearing
+      // as several sheet rows can't stack within one sync.
+      const key=eid||(date+'|'+Math.abs(amt).toFixed(2)+'|'+merch.toLowerCase());
+      if(seen.has(key)){skipped++;continue;}
+      seen.add(key);
+      if(existingDA.has(dupKey(date,amt))){skipped++;continue;}   // already have this exact one (e.g. from CSV)
+      existingDA.add(dupKey(date,amt));
+      const lineId=resolveLineId(catText,merch);
+      const note=(isRefund?'Refund: ':'')+(merch||catText);
+      state.txns.push({amt,id:lineId,date,note:note+' (email)',ts:date,src:'email',eid:key,bankCat:catText});
+      const mk=monthKeyOf(date);
+      state.actualsByMonth[mk]=state.actualsByMonth[mk]||{};
+      state.actualsByMonth[mk][lineId]=Math.round(((Number(state.actualsByMonth[mk][lineId])||0)+amt)*100)/100;
+      if(isRefund)refunds++;else added++;
+    }
+    save();render();
+    alert(`Email sync done.\nAdded ${added} charge${added!==1?'s':''}${refunds?`, ${refunds} refund${refunds!==1?'s':''} (subtracted from spending)`:''}${skipped?`, skipped ${skipped} already synced`:''}.`);
+  }catch(e){
+    alert('Could not fetch the sheet. Check that it\'s published to the web as CSV and the URL is correct.\n\n'+e.message);
+  }finally{ if(btn){btn.textContent='📧 Sync email';btn.disabled=false;} }
+}
+
+// ---------- Import a downloaded bank CSV (Chase / Amex / Capital One / Discover …) ----------
+// Auto-detects columns and sign convention, maps the bank's own category to a budget line,
+// and dedupes by date+amount so re-imports and email-overlap don't double-count.
+function parseMoney(s){if(s==null)return 0;s=String(s).trim();const neg=/^\(.*\)$/.test(s)||s.indexOf('-')>=0;const n=parseFloat(s.replace(/[^0-9.]/g,''));return isNaN(n)?0:(neg?-n:n);}
+function dupKey(date,amt){return date+'|'+(Math.round(Number(amt)*100)/100).toFixed(2);}
+// Fuller identity key: date + amount + merchant (suffix-stripped). Used with per-key COUNTS so
+// re-importing the same file never stacks, yet two genuine same-day/same-amount buys both count.
+function txKey(date,amt,note){return dupKey(date,amt)+'|'+String(note||'').replace(/\s*\((csv|email|paycheck)\)\s*$/i,'').toLowerCase().trim().slice(0,40);}
+function parseDateISO(s){
+  if(!s)return '';s=String(s).trim();
+  let m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);if(m)return `${m[1]}-${m[2]}-${m[3]}`;
+  m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);if(m){let yr=m[3];if(yr.length===2)yr='20'+yr;return `${yr}-${String(m[1]).padStart(2,'0')}-${String(m[2]).padStart(2,'0')}`;}
+  const d=new Date(s);if(!isNaN(d))return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  return '';
+}
+// Bank/merchant text → one of the SHEET_CAT_MAP category names.
+const CSV_MERCHANT_RULES=[
+  // bills usually paid from checking (matched before generic merchant rules)
+  [/mortgage|home ?loan|escrow|loan servicing|mr cooper|rocket mortgage|freedom mtg|\bmtg\b/i,'Housing'],
+  [/mge|madison gas|we energies|alliant|\bwpl\b|electric|water works|water utility|city of madison|sewer|natural gas|utility/i,'Utilities'],
+  [/insurance|new york life|northwestern mutual|geico|state farm|progressive|allstate/i,'Insurance'],
+  [/daycare|childcare|kindercare|learning center|preschool|montessori/i,'Daycare'],
+  [/tuition|bursar|university of wis|uw-?madison/i,'Tuition / school'],
+  [/comcast|xfinity|at ?& ?t|\batt payment\b|verizon|t-mobile|spectrum|\binternet\b|wireless/i,'Internet / phone'],
+  [/whole ?foods|trader joe|hy-?vee|woodman|h[- ]?mart|hmart|super ?h|99 ?ranch|aldi|costco|meijer|festival food|grocery|market/i,'Groceries'],
+  [/tous les jours|restaurant|cafe|café|coffee|starbucks|dunkin|doordash|uber ?eats|grubhub|chipotle|mcdonald|pizza|sushi|ramen|noodle|panera|bakery|bar & grill|kitchen|grill|bibimbap/i,'Dining & takeout'],
+  [/shell|exxon|mobil|chevron|citgo|marathon|speedway|kwik trip|\bbp\b|\bgas\b|fuel|parking/i,'Transportation & gas'],
+  [/uber|lyft|delta|united air|american air|korean air|asiana|southwest|airbnb|hotel|marriott|hyatt|hilton|expedia|airline|transportation service|hertz|avis|enterprise rent|budget rent|rental car|car rental|museum|childrens mus|\bzoo\b|aquarium/i,'Travel'],
+  [/amazon|amzn|target|walmart|best buy|levi|apple\.com|apple store|nordstrom|macy|nike|sephora|ulta|ikea|etsy|ebay|uniqlo/i,'Shopping & personal'],
+  [/netflix|spotify|hulu|disney|hbo|\bmax\b|youtube|subscription/i,'Subscriptions'],
+];
+function resolveCatName(bankCat,desc){
+  const c=(bankCat||'').toLowerCase().trim();
+  const map=[
+    [/grocer|supermarket/,'Groceries'],
+    [/dining|restaurant|food & drink|food and drink|\bfood\b/,'Dining & takeout'],
+    [/gas|fuel|automotive/,'Transportation & gas'],
+    [/travel|airfare|airline|lodging|hotel/,'Travel'],
+    [/merchandise|shopping|retail|personal|health|department/,'Shopping & personal'],
+    [/internet|phone|cable/,'Internet / phone'],
+    [/utilit|\bbills\b/,'Utilities'],
+    [/entertainment/,'Travel'],
+    [/education|tuition/,'Tuition / school'],
+  ];
+  for(const[re,name]of map)if(re.test(c))return name;
+  for(const[re,name]of CSV_MERCHANT_RULES)if(re.test(desc||''))return name;
+  return 'Uncategorized';
+}
+// Specific payees that map straight to an exact budget line (bills the category names can't reach).
+const CSV_MERCHANT_LINE=[
+  [/\bvalon\b/i,'wisconsin:0'],                  // mortgage servicer → WI Mortgage
+  [/investco-?boxcar|\bboxcar\b/i,'seattle:0'],  // Seattle apartment rent
+  [/loan payment|installment/i,'fixed:1'],       // UWCU car installment loan payment(s)
+  [/new york life|\bnyl\b/i,'fixed:2'],          // New York Life → life-insurance line
+  [/progressive|auto ?insurance|car ?insurance/i,'fixed:3'], // Progressive → auto-insurance line
+  [/costco ?\.?com|www\.?costco/i,'flex:1'],     // Costco online → Shopping (mattress, electronics)
+  [/costco gas/i,'flex:2'],                       // Costco gas → Transportation
+  [/costco (whse|wholesale)/i,'flex:5'],          // Costco warehouse → Groceries
+];
+// ---- Learned categorization rules (from tap-to-move) ----
+// A rule maps a normalized merchant "signature" → a budget line id. Signatures collapse store
+// numbers, locations, and processor prefixes (SQ*, TST*, PP*) so near-identical names match:
+// "SQ *CAFE #65160 SOUTH LAK" and "SQ *CAFE #65160" both reduce to "cafe".
+function merchantKey(s){
+  let c=String(s||'').toLowerCase()
+    .replace(/^refund:\s*/,'')
+    .replace(/\s*\((csv|email|paycheck)\)\s*$/,'')
+    .replace(/\b(sq|tst|pp|dd|sp|paypal|pos|ach|pmt|pymt)\b[\s*#:.-]*/g,' ') // payment-processor prefixes
+    .replace(/[*#].*$/,' ')          // cut trailing store id after * or #
+    .replace(/\d[\d.\-]*/g,' ')      // drop numbers
+    .replace(/[^a-z ]+/g,' ')        // drop punctuation
+    .replace(/\b(llc|inc|co|corp|store|the|com|www)\b/g,' ')
+    .replace(/\s+/g,' ').trim();
+  return c.split(' ').slice(0,3).join(' ');   // first 3 tokens = the signature
+}
+function lineExists(id){const p=String(id).split(':');const arr=state.plan&&state.plan[p[0]];return !!(arr&&arr[Number(p[1])]);}
+function learnedLineId(desc){
+  const k=merchantKey(desc);if(!k)return null;
+  const id=(state.catRules||{})[k];
+  return (id&&lineExists(id))?id:null;
+}
+function resolveLineId(bankCat,desc){
+  const learned=learnedLineId(desc);if(learned)return learned;   // user's tap-to-move rules win
+  for(const[re,lid]of CSV_MERCHANT_LINE)if(re.test(desc||''))return lid;
+  return SHEET_CAT_MAP[resolveCatName(bankCat,desc)]||'flex:4';
+}
+// The income line that captured deposits (reimbursements, one-time checks) roll into.
+function otherIncomeId(s){
+  const inc=(s&&s.plan&&s.plan.income)||(state.plan.income||[]);
+  const i=inc.findIndex(x=>/other income|reimburse|misc income|one-?time/i.test((x&&x.nm)||''));
+  return 'income:'+(i>=0?i:inc.length-1);
+}
+// Card-payment / transfer rows to skip on import (card-specific + transfers only, so real
+// bills paid from checking — mortgage, utilities, insurance — are NOT dropped).
+function isCardPaymentOrTransfer(d){
+  return /payment thank you|thank you.*payment|thank you for your payment|payment\s*[-–]\s*thank|automatic payment\b.{0,15}thank|cardmember serv|card member serv|credit crd|credit card|crcardp[iy]?mt|card ?p[iy]?mt|card payment|card ending in|payment to .{0,25}card|balance transfer|online transfer|transfer to|transfer from|\btfr to\b|xfer to|\bzelle\b|wire transfer|\bwithdrawal\b|wise inc|transferwise|american express.*(p[iy]?mt|payment)|amex.*(p[iy]?mt|payment)|discover.*(payment|e-?pay)|capital one.*(p[iy]?mt|payment)|chase credit|citi.*(p[iy]?mt|payment|autopay)|barclay|synchrony|u\.?s\.? ?bank.*(p[iy]?mt|payment)|usbank.*(p[iy]?mt|payment)|(web p[iy]?mt|online p[iy]?mt|web payment|e-?p[iy]?mt) ?\*{2,}/.test(d);
+}
+// Re-run categorization on already-imported transactions (fixes miscategorized ones without
+// re-importing). Moves each txn's amount from its old budget line to the newly-resolved one.
+function recategorizeImported(){
+  const imp=(state.txns||[]).filter(t=>t.src==='csv'||t.src==='email');
+  if(!imp.length){alert('No imported transactions to recategorize.');return;}
+  let moved=0;
+  imp.forEach(t=>{
+    if(/^income:|^payroll:/.test(t.id))return;   // never re-run the spending categorizer on income/payroll deposits
+    const desc=(t.note||'').replace(/^Refund:\s*/i,'').replace(/\s*\((csv|email)\)\s*$/,'');
+    // CSV rows: reuse the BANK'S OWN category (stored at import) — re-deriving from description
+    // alone used to shove correctly-categorized rows (e.g. Chase "Travel") into Misc.
+    // Email rows: the stored category is OUR OWN heuristic guess from email text, not the
+    // bank's — and it was prone to a footer-boilerplate bug that dumped unrelated purchases
+    // into "Internet / phone". So always re-derive email categories from the merchant text.
+    const lineId=resolveLineId(t.src==='csv'?(t.bankCat||''):'',desc);
+    if(lineId!==t.id){
+      const mk=monthKeyOf(t.date),rec=state.actualsByMonth[mk]=state.actualsByMonth[mk]||{};
+      if(rec[t.id]!=null){const nv=Math.round((Number(rec[t.id])-t.amt)*100)/100;if(nv>0.005)rec[t.id]=nv;else delete rec[t.id];}
+      rec[lineId]=Math.round(((Number(rec[lineId])||0)+t.amt)*100)/100;
+      t.id=lineId;moved++;
+    }
+  });
+  save();render();
+  alert(`Recategorized ${moved} transaction${moved!==1?'s':''}.`);
+}
+async function importBankCSV(e){
+  const files=[].slice.call(e.target.files);if(!files.length)return;
+  const btn=document.getElementById('csvBtn');if(btn){btn.textContent='📄 Reading…';btn.disabled=true;}
+  state.txns=state.txns||[];
+  // Count existing txns per identity ONCE up front; seenCount runs across ALL files this import.
+  const existCount={};
+  state.txns.forEach(t=>{const kk=txKey(t.date,t.amt,t.note);existCount[kk]=(existCount[kk]||0)+1;});
+  // Cross-source dedup: an emailed alert and a CSV row for the SAME charge share date+amount.
+  // Tally existing EMAIL-sourced txns by date+amount so a later CSV import won't re-add them.
+  const emailDA={};
+  state.txns.forEach(t=>{if(t.src==='email'){const kk=dupKey(t.date,t.amt);emailDA[kk]=(emailDA[kk]||0)+1;}});
+  const emailSeen={};
+  let added=0,incomeAdded=0,refundsApplied=0,dupes=0,skipped=0,filesRead=0,filesBad=0;const byMonth={};
+  const find=(head,names)=>{for(const n of names){const i=head.indexOf(n);if(i>=0)return i;}for(const n of names){const i=head.findIndex(h=>h.includes(n));if(i>=0)return i;}return -1;};
+  // Writer: record one classified candidate + update monthly actuals + counters. Dedup is
+  // decided in the second pass below, so this just writes.
+  function writeRow(c){
+    const mk=monthKeyOf(c.date);
+    state.txns.push({amt:Math.round(c.amtSigned*100)/100,id:c.lineId,date:c.date,note:c.note,ts:c.date,src:'csv',key:c.k,bankCat:c.catText||''});
+    state.actualsByMonth[mk]=state.actualsByMonth[mk]||{};
+    state.actualsByMonth[mk][c.lineId]=Math.round(((Number(state.actualsByMonth[mk][c.lineId])||0)+c.amtSigned)*100)/100;
+    byMonth[mk]=(byMonth[mk]||0)+1;
+    if(c.bucket==='income')incomeAdded++;else if(c.bucket==='refund')refundsApplied++;else added++;
+  }
+  const cands=[];        // every classified row across all files, in order
+  const perFileMax={};   // identity key -> most copies seen in ANY single file (overlap guard)
+  try{
+    for(const f of files){
+      let text; try{text=await f.text();}catch(err){filesBad++;continue;}
+      const rows=parseCSV(text).filter(row=>row.length>1);
+      if(rows.length<2){filesBad++;continue;}
+      const head=rows[0].map(h=>h.trim().toLowerCase());
+      const ci={
+        date:find(head,['transaction date','trans date','trans. date','date','posted date','post date']),
+        desc:find(head,['description','merchant','payee','name']),
+        cat:find(head,['category']),
+        amt:find(head,['amount','debit']),
+        debit:find(head,['debit']),credit:find(head,['credit']),type:find(head,['type']),
+      };
+      if(ci.date<0||ci.desc<0||(ci.amt<0&&ci.debit<0)){filesBad++;continue;}
+      const data=rows.slice(1).filter(row=>row.length>Math.max(ci.date,ci.desc));
+      const hasDC=ci.debit>=0&&ci.credit>=0;
+      // Income capture ONLY for bank/checking accounts (they carry a running Balance column).
+      // On a credit card, an inflow is a payment/statement-credit/refund — never income.
+      const isBankAccount=head.some(h=>h.includes('balance')||h.includes('check #')||h==='check number'||h.includes('running balance'));
+      let majoritySign=-1;
+      if(!hasDC){let pos=0,neg=0;data.forEach(row=>{const v=parseMoney(row[ci.amt]);if(v>0)pos++;else if(v<0)neg++;});majoritySign=neg>=pos?-1:1;}
+      const fileCount={};   // identity key -> copies in THIS file
+      const push=(date,amtSigned,lineId,desc,catText,bucket)=>{
+        const note=(bucket==='refund'?'Refund: ':'')+(desc||catText||'transaction')+' (csv)';
+        const k=txKey(date,amtSigned,note);
+        fileCount[k]=(fileCount[k]||0)+1;
+        cands.push({date,amtSigned,lineId,catText,bucket,note,k});
+      };
+      data.forEach(row=>{
+        const descLow=(row[ci.desc]||'').toLowerCase();
+        const rawType=(ci.type>=0?row[ci.type]:'').toLowerCase();
+        if(isCardPaymentOrTransfer(descLow)){skipped++;return;}   // card payments & transfers: neither spend nor income
+        const isLoanPmt=/loan payment|installment/.test(descLow);
+        // Classify each row as an outflow (spend) or an inflow (credit).
+        let spend=0,gain=0;
+        if(hasDC){const d=parseMoney(row[ci.debit]),c=parseMoney(row[ci.credit]);if(d>0)spend=d;else if(c>0)gain=c;}
+        else{const v=parseMoney(row[ci.amt]);if(!v||isNaN(v)){skipped++;return;}if(isLoanPmt||Math.sign(v)===majoritySign)spend=Math.abs(v);else gain=Math.abs(v);}
+        const date=parseDateISO(row[ci.date]);if(!date){skipped++;return;}
+        const desc=(row[ci.desc]||'').trim();
+        const catText=ci.cat>=0?(row[ci.cat]||'').trim():'';
+        // Refund/return of a real purchase → money back to its category (subtract).
+        const isRefund=/return|refund|reversal/.test(rawType)||/\brefund\b|\breturn(ed)?\b|reversal/.test(descLow);
+        // Reward / statement credit / card perk → money back never tracked as spend. Drop it.
+        const isReward=/cash ?back|reward|redemption|statement credit|membership (reward|credit)|uber cash|capital one shopping|thank you|\bcredit\s*$|(annual|hotel|travel|dining|airline|entertainment|uber|resy|saks|equinox|streaming|digital|clear) credit/.test(descLow)||/adjustment|reward/.test(rawType);
+        if(spend>0){
+          // Odd sign convention: a refund can land in the debit/spend column — flip it negative.
+          if(isRefund){push(date,-spend,resolveLineId(catText,desc),desc,catText,'refund');return;}
+          push(date,spend,resolveLineId(catText,desc),desc,catText,'spend');return;
+        }
+        if(gain>0){
+          if(isBankAccount){
+            // J's Amazon net pay → "J — Seattle summer job" income line (only J has Amazon income).
+            if(/amazon/.test(descLow)&&/payroll|svcs payroll/.test(descLow)){
+              const si=(state.plan.income||[]).findIndex(x=>/seattle|amazon/i.test((x&&x.nm)||''));
+              push(date,gain,'income:'+(si>=0?si:2),desc||'Amazon pay',catText,'income');return;
+            }
+            // Genuine income deposits (reimbursements, one-time checks like the Amazon relocation)
+            // → "Other income". Exclude paycheck direct deposits (Han's counted from payslips),
+            // interest, refunds, rewards, card payments, statement credits.
+            if(/direct dep|dir dep|\bpayroll\b|university of wi|uw system|state of wi|\binterest\b|dividend|\brefund\b|\breturn\b|reversal|cash ?back|reward|redemption|capital one shopping|thank you|statement credit|autopay|automatic payment|\bcredit\b.*\/year|travel credit|service fee/.test(descLow)){skipped++;return;}
+            push(date,gain,otherIncomeId(state),desc||'deposit',catText,'income');return;
+          }
+          // Credit-card inflow that isn't a payment (already filtered): a reward/statement credit
+          // is dropped; anything else is a purchase refund → subtract from its category.
+          if(isReward){skipped++;return;}
+          push(date,-gain,resolveLineId(catText,desc),desc,catText,'refund');return;
+        }
+        skipped++;
+      });
+      Object.keys(fileCount).forEach(k=>{perFileMax[k]=Math.max(perFileMax[k]||0,fileCount[k]);});
+      filesRead++;
+    }
+    // Dedup pass: end up with max(already-stored, max-copies-in-any-single-file) copies of each
+    // identity — so two OVERLAPPING export files don't double-count, yet genuine repeats within a
+    // single file survive. Rows already synced from email (same date+amount) are also dropped.
+    const toAdd={};
+    Object.keys(perFileMax).forEach(k=>{toAdd[k]=Math.max(0,perFileMax[k]-(existCount[k]||0));});
+    cands.forEach(c=>{
+      if((toAdd[c.k]||0)<=0){dupes++;return;}                           // already have enough copies
+      const dk=dupKey(c.date,c.amtSigned);const es=emailSeen[dk]||0;
+      if(es<(emailDA[dk]||0)){emailSeen[dk]=es+1;toAdd[c.k]--;dupes++;return;}  // email already has this one
+      toAdd[c.k]--;writeRow(c);
+    });
+    if(added){const months=Object.keys(byMonth).sort();curMonth=months[months.length-1];view='track';}
+    save();render();
+    const monthsTxt=Object.keys(byMonth).sort().map(m=>`   ${m}: ${byMonth[m]}`).join('\n');
+    alert(`Imported ${added} transaction${added!==1?'s':''} from ${filesRead} file${filesRead!==1?'s':''}.`+
+      (refundsApplied?`\nApplied ${refundsApplied} refund${refundsApplied!==1?'s':''} (subtracted from their categories).`:'')+
+      (incomeAdded?`\nAdded ${incomeAdded} income deposit${incomeAdded!==1?'s':''} → "Other income" (review & remove any that aren't real income).`:'')+
+      (dupes?`\nSkipped ${dupes} already present.`:'')+
+      (skipped?`\nSkipped ${skipped} payments/credits/blank rows.`:'')+
+      (filesBad?`\nSkipped ${filesBad} file(s) — not a recognizable bank CSV.`:'')+
+      (monthsTxt?`\n\nBy month:\n${monthsTxt}`:''));
+  }catch(err){alert('Could not import.\n\n'+err.message);}
+  finally{if(btn){btn.textContent='📄 Import CSV';btn.disabled=false;}e.target.value='';}
+}
+
+// Remove already-imported rows that are actually card payments/transfers (e.g. "AMERICAN
+// EXPRESS ACH PMT $11,646" from checking) — these were imported as spending by an older bug
+// where the payment-detector regex missed plain "PMT" text. Re-tests every imported row against
+// the CURRENT (fixed) detector and drops matches; real purchases are untouched.
+function purgeCardPayments(){
+  const imp=(state.txns||[]).filter(t=>t.src==='csv'||t.src==='email');
+  const bad=imp.filter(t=>{
+    if(/^income:|^payroll:/.test(t.id))return false;
+    const desc=(t.note||'').replace(/^Refund:\s*/i,'').replace(/\s*\((csv|email)\)\s*$/i,'');
+    return isCardPaymentOrTransfer(desc.toLowerCase());
+  });
+  if(!bad.length){alert('No card-payment/transfer rows found in your imported spending — nothing to remove.');return;}
+  const sample=bad.slice(0,3).map(t=>`  • ${fmt(t.amt)} — ${t.note.replace(/\s*\((csv|email)\)\s*$/i,'')}`).join('\n');
+  if(!confirm(`Found ${bad.length} card-payment/transfer row${bad.length!==1?'s':''} that were imported as spending by an earlier bug, e.g.:\n${sample}${bad.length>3?'\n  …':''}\n\nRemove them? This only removes rows that look like payments/transfers — real purchases are untouched.`))return;
+  const badSet=new Set(bad);
+  bad.forEach(t=>{
+    const mk=monthKeyOf(t.date),rec=state.actualsByMonth[mk];
+    if(rec&&rec[t.id]!=null){const nv=Math.round((Number(rec[t.id])-t.amt)*100)/100;if(Math.abs(nv)>0.005)rec[t.id]=nv;else delete rec[t.id];}
+  });
+  state.txns=(state.txns||[]).filter(t=>!badSet.has(t));
+  save();render();
+  alert(`Removed ${bad.length} card-payment/transfer row${bad.length!==1?'s':''}.`);
+}
+// Undo all CSV/email-imported transactions by reversing their amounts out of the monthly
+// actuals; hand-logged (quick-add) entries are left untouched.
+function clearImportedSpending(){
+  const n=(state.txns||[]).filter(t=>t.src==='csv'||t.src==='email').length;
+  if(!n){alert('No imported transactions to clear.');return;}
+  if(!confirm(`Remove all ${n} CSV/email-imported transactions and their amounts?\nYour hand-logged entries are kept.`))return;
+  const keep=[];
+  (state.txns||[]).forEach(t=>{
+    if(t.src==='csv'||t.src==='email'){
+      const mk=monthKeyOf(t.date),rec=state.actualsByMonth[mk];
+      if(rec&&rec[t.id]!=null){const nv=Math.round((Number(rec[t.id])-t.amt)*100)/100;if(nv>0.005)rec[t.id]=nv;else delete rec[t.id];}
+    } else keep.push(t);
+  });
+  state.txns=keep;save();render();
+  alert(`Cleared ${n} imported transactions.`);
+}
+
+// Data cleanup: back up, drop all CSV/email-imported rows, and reopen the importer so the
+// corrected refund/category logic recomputes historicals cleanly (hand-logged & paychecks kept).
+function rebuildImported(){
+  const n=(state.txns||[]).filter(t=>t.src==='csv'||t.src==='email').length;
+  if(!n){alert('Nothing imported yet — just press “📄 Import CSV”.');return;}
+  if(!confirm(`Rebuild imported spending?\n\n1) Downloads a JSON backup first.\n2) Removes all ${n} CSV/email-imported transactions so you can re-import them with the corrected refund + category logic.\n\nHand-logged entries and paychecks are kept.`))return;
+  try{exportData();}catch(e){}
+  (state.txns||[]).forEach(t=>{
+    if(t.src==='csv'||t.src==='email'){
+      const mk=monthKeyOf(t.date),rec=state.actualsByMonth[mk];
+      if(rec&&rec[t.id]!=null){const nv=Math.round((Number(rec[t.id])-t.amt)*100)/100;if(Math.abs(nv)>0.005)rec[t.id]=nv;else delete rec[t.id];}
+    }
+  });
+  state.txns=(state.txns||[]).filter(t=>t.src!=='csv'&&t.src!=='email');
+  save();render();
+  alert(`Cleared ${n} imported transactions (backup downloaded).\n\nNext:\n1) Re-select your bank/card CSVs in the picker that opens — refunds now subtract, categories use each bank's own category.\n2) Press “📧 Sync email” to re-pull.\n\nNote: email refunds written to your Google Sheet BEFORE this fix are stored there as positive charges. To correct those, clear the sheet and re-run the updated Apps Script (see SETUP-EMAIL-TRACKING.md).`);
+  const cf=document.getElementById('csvFile');if(cf)cf.click();
+}
+
+// ---------- Import UW payslip PDFs → retirement (403b + Roth 403b + WRS employee) per month ----------
+async function pdfToText(arrayBuffer){
+  const pdf=await pdfjsLib.getDocument({data:arrayBuffer}).promise;
+  let text='';
+  for(let p=1;p<=pdf.numPages;p++){const page=await pdf.getPage(p);const c=await page.getTextContent();text+=c.items.map(it=>it.str).join(' ')+'\n';}
+  return text;
+}
+function parsePayslip(text){
+  const num=s=>parseFloat(String(s||'').replace(/,/g,''))||0;
+  const dm=text.match(/(\d{1,2}\/\d{1,2}\/\d{4})\s+(\d{1,2}\/\d{1,2}\/\d{4})\s+(\d{1,2}\/\d{1,2}\/\d{4})/); // begin, end, CHECK date
+  if(!dm)return null;
+  const parts=dm[3].split('/'),mo=parts[0].padStart(2,'0'),da=parts[1].padStart(2,'0'),yr=parts[2];
+  const r403=num((text.match(/403\(b\)-\s*Fidelity\s+([\d,]+\.\d{2})/)||[])[1]);
+  const roth=num((text.match(/403\(b\)-\s*Roth\s*Fidelity\s+([\d,]+\.\d{2})/)||[])[1]);
+  const wrs=num((text.match(/Wisconsin Retirement System\s+([\d,]+\.\d{2})/)||[])[1]); // 1st = employee pre-tax
+  const netm=text.match(/Current\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})/);
+  const gross=netm?num(netm[1]):0, preTax=netm?num(netm[2]):num((text.match(/Total Pre Tax Deductions\s+([\d,]+\.\d{2})/)||[])[1]);
+  const postTax=netm?num(netm[3]):num((text.match(/Total Post Tax Deductions\s+([\d,]+\.\d{2})/)||[])[1]);
+  const net=netm?num(netm[5]):0;
+  const retirement=Math.round((r403+roth+wrs)*100)/100;
+  // Everything deducted pre/post-tax that ISN'T retirement = health/dental/vision/life/benefit premiums
+  // (net of any Prepaid credits) — i.e. your other payroll benefit costs.
+  const benefits=Math.round((preTax+postTax-retirement)*100)/100;
+  const who=(PAYSLIP_NAME_MATCH&&new RegExp(PAYSLIP_NAME_MATCH,'i').test(text))?'j':'han';   // whose payslip → routes net pay to the right income line
+  if(!retirement&&!net)return null;
+  return {date:`${yr}-${mo}-${da}`,month:`${yr}-${mo}`,who,gross,net,r403,roth,wrs,retirement,benefits};
+}
+// Extract text PER PAGE so a combined multi-payslip PDF yields one record per page.
+async function pdfPageTexts(arrayBuffer){
+  const pdf=await pdfjsLib.getDocument({data:arrayBuffer}).promise;
+  const pages=[];
+  for(let p=1;p<=pdf.numPages;p++){const page=await pdf.getPage(p);const c=await page.getTextContent();pages.push(c.items.map(it=>it.str).join(' '));}
+  return pages;
+}
+async function importPaychecks(e){
+  const files=[].slice.call(e.target.files);if(!files.length)return;
+  if(typeof pdfjsLib==='undefined'){alert('PDF reader didn\'t load — check your connection and reload.');return;}
+  pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const btn=document.getElementById('pcBtn');if(btn){btn.textContent='📄 Reading…';btn.disabled=true;}
+  state.paychecks=state.paychecks||{};
+  let added=0,dupes=0,failed=0;
+  try{
+    for(const f of files){
+      try{
+        const pages=await pdfPageTexts(await f.arrayBuffer());   // one record per page (handles combined PDFs)
+        for(const pageText of pages){
+          const p=parsePayslip(pageText);
+          if(!p)continue;
+          const key=(p.who||'han')+'|'+p.date+'|'+(Number(p.net)||0).toFixed(2);
+          if(state.paychecks[key])dupes++;else added++;
+          state.paychecks[key]=p;   // overwrite so re-import refreshes fields
+        }
+      }catch(err){failed++;}
+    }
+    // Fill the retirement savings line's monthly actual = sum of that month's paycheck retirement.
+    rebuildPaychecks(state);
+    const months={};Object.values(state.paychecks).forEach(p=>{months[p.month]=1;});
+    if(added){const ms=Object.keys(months).sort();curMonth=ms[ms.length-1];view='track';}
+    save();render();
+    alert(`Paychecks: added ${added}${dupes?', '+dupes+' already imported':''}${failed?', '+failed+' unreadable':''}.\n`+
+      `Retirement + health/benefits filled into the Pre-tax payroll section for ${Object.keys(months).length} month(s).`);
+  }finally{if(btn){btn.textContent='📄 Import paychecks';btn.disabled=false;}e.target.value='';}
+}
+
+function sumSec(k){return state.plan[k].reduce((a,x)=>a+(Number(x.amt)||0),0);}
+function planIncome(){return sumSec('income');}
+function planOut(){return SPEND_SECS.reduce((a,k)=>a+sumSec(k),0);}
+function planHousing(){return HOUSING_SECS.reduce((a,k)=>a+sumSec(k),0);}
+function planLeftover(){return planIncome()-planOut();}
+// Per-month plan overrides: a month can set its own budget for any line (e.g. Seattle rent in
+// summer, daycare from September). Blank = use the base plan value.
+function planFor(sec,i,mk){const o=state.planOverrides&&state.planOverrides[mk];const id=sec+':'+i;if(o&&o[id]!=null)return Number(o[id])||0;return Number((state.plan[sec][i]||{}).amt)||0;}
+function planOutForMonth(mk){let t=0;SPEND_SECS.forEach(sec=>(state.plan[sec]||[]).forEach((it,i)=>t+=planFor(sec,i,mk)));return t;}
+function setPlanOverride(mk,sec,i,v){state.planOverrides=state.planOverrides||{};state.planOverrides[mk]=state.planOverrides[mk]||{};const id=sec+':'+i;if(v===''||v==null)delete state.planOverrides[mk][id];else state.planOverrides[mk][id]=parseFloat(v)||0;if(!Object.keys(state.planOverrides[mk]).length)delete state.planOverrides[mk];save();renderTrack();}
+
+// ---------- COACH: automatic rules over live plan + tracked actuals ----------
+function recentMonths(n){ // last n month-keys up to current, newest first
+  let[y,m]=curMonth.split('-').map(Number);const out=[];
+  for(let i=0;i<n;i++){out.push(`${y}-${String(m).padStart(2,'0')}`);m--;if(m<1){m=12;y--;}}
+  return out;
+}
+function actualTotalFor(mkey){const rec=state.actualsByMonth[mkey];if(!rec)return null;let t=0,any=false;Object.values(rec).forEach(v=>{if(v!=null&&v!==''){t+=Number(v)||0;any=true;}});return any?t:null;}
+function lineActual(mkey,sec,i){const rec=state.actualsByMonth[mkey];if(!rec)return null;const v=rec[sec+':'+i];return (v==null||v==='')?null:Number(v)||0;}
+
+function computeCoach(){
+  const alerts=[]; // {level:'warn'|'win'|'tip', icon, text}
+  const inc=planIncome(); if(!inc) return alerts;
+  const housing=planHousing(), fixed=sumSec('fixed'), flex=sumSec('flex'), save=sumSec('save'), out=planOut();
+  const gross=inc+AUTO_RETIREMENT;
+
+  // 1. Plan doesn't balance
+  const left=inc-out;
+  if(left<-20) alerts.push({level:'warn',icon:'🚨',text:`Your plan spends ${fmt(-left)} more than your ${fmt(inc)} take-home. Trim a category or add income.`});
+  else if(left>200) alerts.push({level:'tip',icon:'🎯',text:`${fmt(left)}/mo is unassigned. Give it a job — send it to savings or a goal.`});
+
+  // 2. Housing burden
+  const hPct=Math.round(housing/inc*100);
+  if(hPct>=45) alerts.push({level:'warn',icon:'🏠',text:`Housing is ${hPct}% of take-home (${fmt(housing)}) — well above the ~30–35% guideline. Two mortgages are the biggest strain; rental income on Seattle would change this a lot.`});
+  else if(hPct>=36) alerts.push({level:'warn',icon:'🏠',text:`Housing is ${hPct}% of take-home — a bit above the ~35% comfort line.`});
+
+  // 3. Liquid savings rate (take-home savings, excludes auto-retirement)
+  const liqPct=Math.round(save/inc*100);
+  if(liqPct<10) alerts.push({level:'warn',icon:'💧',text:`Only ${liqPct}% of take-home goes to liquid savings (${fmt(save)}/mo). Your retirement is strong, but aim to lift accessible savings toward 10–15%.`});
+
+  // 4. Total savings rate win (incl. retirement)
+  const totPct=Math.round((save+AUTO_RETIREMENT)/gross*100);
+  if(totPct>=20) alerts.push({level:'win',icon:'🌟',text:`Total savings rate is ${totPct}% (incl. ${fmt(AUTO_RETIREMENT)}/mo retirement) — above the 20% target.`});
+  else alerts.push({level:'warn',icon:'💧',text:`Savings rate is ${totPct}% — below the ~20% target. Raising your retirement contribution is one of the biggest levers.`});
+  // retirement contribution room
+  if(AUTO_RETIREMENT>0) alerts.push({level:'tip',icon:'🏦',text:`Retirement to-do: you contribute ~${fmt(AUTO_RETIREMENT*12)}/yr toward retirement. Employer match (~${fmt(EMPLOYER_RETIREMENT)}/mo) helps, but consider increasing your own contribution when cash flow allows.`});
+
+  // 5. Emergency fund target reminder
+  const essential=housing+fixed;
+  alerts.push({level:'tip',icon:'🛟',text:`Emergency-fund target: ${fmt(essential*3)}–${fmt(essential*6)} (3–6× your ${fmt(essential)}/mo essentials) in a high-yield savings account.`});
+
+  // 5b. Seasonal savings-fund reminder (generic — reacts to whatever fund lines you've set up)
+  const seasonalFund=(state.plan.save||[]).filter(x=>/seasonal|start-up|startup|tuition/i.test(x.nm)).reduce((a,x)=>a+(Number(x.amt)||0),0);
+  const secondaryIncome=(state.plan.income||[]).find(x=>/seasonal|secondary/i.test(x.nm));
+  if(secondaryIncome&&Number(secondaryIncome.amt)>0&&seasonalFund<Number(secondaryIncome.amt)*0.3){
+    alerts.push({level:'tip',icon:'🏦',text:`Your seasonal income is active — consider routing part of it into a seasonal savings fund to cover lean-month expenses ahead.`});
+  }
+
+  // 6. Overspending streaks per flexible category (needs tracked actuals)
+  const mk=recentMonths(3);
+  ['flex','fixed'].forEach(sec=>{
+    (state.plan[sec]||[]).forEach((it,i)=>{
+      const planned=Number(it.amt)||0; if(planned<=0) return;
+      let streak=0;
+      for(const m of mk){const a=lineActual(m,sec,i); if(a==null) break; if(a>planned*1.05) streak++; else break;}
+      if(streak>=2) alerts.push({level:'warn',icon:'📈',text:`“${it.nm}” has been over budget ${streak} months running. Raise the budget to ${fmt(Math.round(planned*1.1/10)*10)} or cut back.`});
+    });
+  });
+
+  // 7. This-month pace vs plan
+  const at=actualTotalFor(curMonth);
+  if(at!=null){
+    if(at>out*1.05) alerts.push({level:'warn',icon:'⚠️',text:`This month you've logged ${fmt(at)} vs a ${fmt(out)} plan — ${fmt(at-out)} over.`});
+    else if(at>0 && at<=out) alerts.push({level:'win',icon:'✅',text:`This month you're at ${fmt(at)} of ${fmt(out)} planned — on track.`});
+  }
+
+  // 8. Income variability heads-up (only if history shows real swings)
+  const netHist=Object.values(ACTUALS.netPayByMonth||{});
+  if(netHist.length>=3){
+    const hi=Math.max(...netHist),lo=Math.min(...netHist);
+    if(hi>lo*1.5) alerts.push({level:'tip',icon:'📆',text:`Your income swings by month (high ~${fmt(hi)}, low ~${fmt(lo)}). In high months, sweep the surplus to savings to cover lean months.`});
+  }
+
+  // order: warnings, wins, tips
+  const rank={warn:0,win:1,tip:2};
+  return alerts.sort((a,b)=>rank[a.level]-rank[b.level]);
+}
+function renderCoachBanner(){
+  const el=document.getElementById('coachBanner'); if(!el) return;
+  const a=computeCoach();
+  const warns=a.filter(x=>x.level==='warn');
+  if(!a.length){ el.style.display='none'; return; }
+  el.style.display='block';
+  const top=(warns.length?warns:a).slice(0,2);
+  el.className='coach-banner '+(warns.length?'has-warn':'ok');
+  el.innerHTML=`<div class="coach-top">${warns.length?`⚠️ ${warns.length} thing${warns.length!==1?'s':''} to look at`:'💡 Coach tips'}
+      <button class="coach-toggle" onclick="toggleCoach()">${coachOpen?'Hide':'Show all ('+a.length+')'}</button></div>
+    ${(coachOpen?a:top).map(x=>`<div class="coach-item ${x.level}"><span>${x.icon}</span><span>${x.text}</span></div>`).join('')}`;
+}
+let coachOpen=false;
+function toggleCoach(){coachOpen=!coachOpen;renderCoachBanner();}
+
+// ---------- render ----------
+function render(){
+  document.querySelectorAll('#viewSeg button').forEach(b=>b.classList.toggle('active',b.dataset.v===view));
+  renderCoachBanner();
+  if(view==='plan')renderPlan();
+  else if(view==='weekly')renderWeekly();
+  else if(view==='track')renderTrack();
+  else if(view==='history')renderHistory();
+  else renderAdvice();
+}
+
+// ---------- Weekly spending view ----------
+function weekEndOf(startISO){const d=new Date(startISO+'T00:00');d.setDate(d.getDate()+6);return isoOf(d);}
+function shiftWeek(n){const d=new Date(curWeekStart+'T00:00');d.setDate(d.getDate()+7*n);curWeekStart=isoOf(d);renderWeekly();}
+function weekNav(){
+  const end=weekEndOf(curWeekStart);
+  const fmtD=s=>new Date(s+'T00:00').toLocaleString('en',{month:'short',day:'numeric'});
+  const isThisWeek=curWeekStart===mondayOf(todayISO());
+  return `<div class="month-nav"><button onclick="shiftWeek(-1)">‹</button><div class="mtitle">${fmtD(curWeekStart)} – ${fmtD(end)}${isThisWeek?' <span class="mini">(this week)</span>':''}</div><button onclick="shiftWeek(1)">›</button></div>`;
+}
+function txnsInWeek(startISO,endISO){return (state.txns||[]).filter(t=>t.date>=startISO&&t.date<=endISO);}
+function renderWeekly(){
+  const start=curWeekStart,end=weekEndOf(start);
+  const tx=txnsInWeek(start,end).filter(t=>!/^income:|^payroll:/.test(t.id)).sort((a,b)=>b.date.localeCompare(a.date));
+  const total=tx.reduce((a,t)=>a+t.amt,0);
+  const weeklyBudget=planOut()*12/52;   // monthly plan spread evenly across the ~52.14 weeks/year
+  const pct=weeklyBudget?Math.min(total/weeklyBudget*100,120):0;
+  const over=total>weeklyBudget;
+  let h=weekNav();
+  h+=`<div class="summary">
+    <div class="stat"><div class="label">Spent this week</div><div class="value spend">${fmt(total)}</div><div class="hint">${start} – ${end}</div></div>
+    <div class="stat"><div class="label">Weekly budget (avg)</div><div class="value">${fmt(weeklyBudget)}</div><div class="hint">monthly plan ÷ ~4.3 weeks</div></div>
+    <div class="stat"><div class="label">${over?'Over by':'Remaining'}</div><div class="value ${over?'spend':'income'}">${fmt(Math.abs(weeklyBudget-total))}</div><div class="hint">${over?'over budget':'left to spend'}</div></div>
+  </div>`;
+  h+=`<div class="bar" style="height:8px;margin-bottom:18px;"><span class="${over?'over':''}" style="width:${pct}%"></span></div>`;
+
+  const bySec={};
+  tx.forEach(t=>{bySec[t.id]=(bySec[t.id]||0)+t.amt;});
+  const secLabel={wisconsin:'🏡 Home 1',seattle:'🏖️ Home 2',fixed:'Fixed',flex:'Flexible',save:'Savings'};
+  let rows='';
+  SPEND_SECS.forEach(sec=>{
+    (state.plan[sec]||[]).forEach((it,i)=>{
+      const id=sec+':'+i,amt=bySec[id]||0; if(!amt)return;
+      rows+=`<div class="line"><div class="cat"><div class="nm">${esc(secLabel[sec]||sec)} — ${esc(it.nm)}</div></div><div class="actual bignum" style="min-width:70px;text-align:right;font-weight:700;">${fmt(amt)}</div></div>`;
+    });
+  });
+  h+=`<div class="section sec-flex"><h3><span>By category</span><span class="tot">${fmt(total)}</span></h3>${rows||'<div class="line"><div class="cat mini">No spending logged this week yet.</div></div>'}</div>`;
+
+  if(tx.length){
+    const opts=planLineOptions();
+    const label=id=>{const o=opts.find(x=>x.id===id);return o?o.label:id;};
+    h+=`<div class="section"><h3><span>Transactions (${tx.length})</span><span class="tot">${fmt(total)}</span></h3>`+
+      tx.map(t=>`<div class="line"><div class="cat"><div class="nm">${esc(t.note||label(t.id))}</div><div class="actual">${esc(label(t.id))} · ${esc(t.date.slice(5))}</div></div><div class="actual bignum" style="min-width:70px;text-align:right;font-weight:700;">${fmt(t.amt)}</div></div>`).join('')+
+      `</div>`;
+  }
+  document.getElementById('main').innerHTML=h;
+}
+
+function renderPlan(){
+  const inc=planIncome(),ho=planHousing(),fx=sumSec('fixed'),fl=sumSec('flex'),sv=sumSec('save'),left=planLeftover();
+  let h=`<div class="summary">
+    <div class="stat"><div class="label">Planned income</div><div class="value income">${fmt(inc)}</div><div class="hint">per month</div></div>
+    <div class="stat"><div class="label">Housing (both homes)</div><div class="value spend">${fmt(ho)}</div><div class="hint">${inc?Math.round(ho/inc*100):0}% of income</div></div>
+    <div class="stat"><div class="label">Other fixed</div><div class="value spend">${fmt(fx)}</div><div class="hint">${inc?Math.round(fx/inc*100):0}% of income</div></div>
+    <div class="stat"><div class="label">Flexible</div><div class="value spend">${fmt(fl)}</div><div class="hint">${inc?Math.round(fl/inc*100):0}% of income</div></div>
+    <div class="stat"><div class="label">Savings</div><div class="value save">${fmt(sv)}</div><div class="hint">${inc?Math.round(sv/inc*100):0}% of income</div></div>
+  </div>`;
+  h+=`<div class="leftover"><div><div class="mini">Unallocated (income − everything)</div><div class="big ${left>=0?'pos':'neg'}">${fmt(left)}</div></div>
+    <div class="mini" style="max-width:340px;text-align:right;">${left>=0?'Every dollar not assigned. Give it a job — add to savings or a goal.':'You have planned to spend more than you earn. Trim flexible or housing costs.'}</div></div>`;
+  h+=secBlock('income','Income','sec-income');
+  h+=secBlock('wisconsin','🏡 Home 1','sec-fixed');
+  h+=secBlock('seattle','🏖️ Home 2 (seasonal)','sec-fixed');
+  h+=secBlock('fixed','Other Fixed / Essential','sec-fixed');
+  h+=secBlock('flex','Flexible / Lifestyle','sec-flex');
+  h+=secBlock('save','Savings & Goals','sec-save');
+  if((state.plan.payroll||[]).length)h+=secBlock('payroll','🏦 Pre-tax payroll (retirement + health, from gross — not take-home)','sec-payroll');
+  document.getElementById('main').innerHTML=h;
+}
+function secBlock(key,title,cls){
+  const items=state.plan[key];const tot=items.reduce((a,x)=>a+(Number(x.amt)||0),0);
+  let h=`<div class="section ${cls}"><h3><span>${title}</span><span class="tot">${fmt(tot)}/mo</span></h3>`;
+  items.forEach((it,i)=>{
+    h+=`<div class="line"><div class="cat"><div class="nm">${esc(it.nm)}</div></div>
+      <div class="amt-in"><input type="number" min="0" step="10" value="${it.amt}" onchange="editLine('${key}',${i},this.value)"></div>
+      <button class="icon-btn" title="Delete" onclick="delLine('${key}',${i})">🗑️</button></div>`;
+  });
+  h+=`<div class="add-line"><button class="btn" onclick="addLine('${key}')">+ Add line</button></div></div>`;
+  return h;
+}
+function editLine(k,i,v){state.plan[k][i].amt=parseFloat(v)||0;save();renderPlan();}
+function delLine(k,i){state.plan[k].splice(i,1);save();renderPlan();}
+function addLine(k){const nm=prompt('Category name:');if(!nm)return;state.plan[k].push({nm:nm.trim(),amt:0});save();renderPlan();}
+
+// One track-view line (per-month Plan + Actual + expandable detail). kind='income' flips wording.
+// --- income smoothing: recurring paychecks shown as a steady monthly average ---
+function isOtherIncomeLine(i){const it=(state.plan.income||[])[i];return !!(it&&/other income|reimburse/i.test(it.nm||''));}
+function incomeLineAvg(i){
+  let total=0,active=0;
+  Object.keys(state.actualsByMonth||{}).forEach(mk=>{const v=state.actualsByMonth[mk]['income:'+i];if(v!=null&&v!==''&&Number(v)!==0){total+=Number(v)||0;active++;}});
+  return active?total/active:0;
+}
+// Value to show for income line i in month mk: smoothed monthly average for recurring paycheck
+// lines (in the months that line was active), actual for one-off "Other income".
+function incomeDisplay(i,mk){
+  const raw=Number((state.actualsByMonth[mk]||{})['income:'+i])||0;
+  if(isOtherIncomeLine(i))return raw;
+  return raw>0?incomeLineAvg(i):0;
+}
+function trackLineHTML(sec,i,key,rec,kind){
+  const it=state.plan[sec][i]; const id=sec+':'+i; const a=rec[id]!=null?rec[id]:'';
+  const base=Number(it.amt)||0;
+  const ovr=!!(state.planOverrides&&state.planOverrides[key]&&state.planOverrides[key][id]!=null);
+  const planned=ovr?(Number(state.planOverrides[key][id])||0):base;
+  const income=(kind==='income');
+  const smoothed=income&&!isOtherIncomeLine(i);
+  const actual=income?incomeDisplay(i,key):(Number(a)||0);
+  const pct=planned?Math.min(actual/planned*100,120):0;const over=actual>planned;
+  const tx=(state.txns||[]).filter(t=>t.id===id&&monthKeyOf(t.date)===key).sort((x,y)=>y.date.localeCompare(x.date));
+  const open=expandedLine===id, clickable=tx.length>0;
+  const status = actual
+    ? (income
+        ? (smoothed?'avg ':'received ')+fmt(actual)+(smoothed?'/mo':'')+(planned?' · plan '+fmt(planned):'')
+        : 'spent '+fmt(actual)+(planned?' · plan '+fmt(planned)+(over?' — over by '+fmt(actual-planned):' — '+fmt(planned-actual)+' left'):''))
+    : (planned?'plan '+fmt(planned)+(income?' · not received':' · not entered'):'not entered');
+  const gotVal=income?(actual?Math.round(actual*100)/100:''):a;
+  let html=`<div class="line"><div class="cat" ${clickable?`style="cursor:pointer" onclick="toggleTxnDetail('${id}')"`:''}>
+    <div class="nm">${clickable?`<span class="tw">${open?'▾':'▸'}</span>`:''}${esc(it.nm)}${tx.length?`<span class="txcount">${tx.length}</span>`:''}${ovr?`<span class="ovr" title="Plan set just for this month">•mo</span>`:''}</div>
+    <div class="actual">${status}</div>
+    <div class="bar"><span class="${!income&&over?'over':''}" style="width:${pct}%"></span></div></div>
+    <div class="io">
+      <div class="fld plan"><label>Plan</label><input type="number" min="0" step="10" placeholder="${base}" value="${ovr?planned:''}" title="Plan for this month only (blank = default ${fmt(base)})" onchange="setPlanOverride('${key}','${sec}',${i},this.value)"></div>
+      <div class="fld"><label>${income?'Got':'Spent'}</label><input type="number" min="0" step="10" placeholder="0" value="${gotVal}" ${smoothed?'readonly title="Smoothed monthly average of biweekly pay"':''} onchange="editActual('${key}','${id}',this.value)"></div>
+    </div></div>`;
+  if(open&&tx.length){
+    html+=`<div class="txlist">`+tx.map(t=>
+      `<div class="txrow"><span class="txd">${esc(t.date.slice(5))}</span><span class="txn">${esc(t.note||'—')}</span><span class="txa">${fmt(t.amt)}</span>`+
+      `<button class="icon-btn" title="Move to another category (and remember)" onclick="openMoveModal('${t.ts}',${t.amt},'${id}','${key}')">📂</button>`+
+      `<button class="icon-btn" title="Remove this transaction" onclick="removeOneTxn('${t.ts}',${t.amt},'${id}','${key}')">🗑️</button></div>`
+    ).join('')+`</div>`;
+  }
+  return {html,planned,actual};
+}
+function trackSection(sec,title,cls,key,rec,kind){
+  let plan=0,act=0,rows='';
+  (state.plan[sec]||[]).forEach((it,i)=>{const r=trackLineHTML(sec,i,key,rec,kind);rows+=r.html;plan+=r.planned;act+=r.actual;});
+  return {html:`<div class="section ${cls}"><h3><span>${title}</span><span class="tot">${fmt(act)} / ${fmt(plan)}</span></h3>${rows}</div>`,plan,act};
+}
+function incomeForMonth(mk){
+  let t=0;(state.plan.income||[]).forEach((it,i)=>{t+=incomeDisplay(i,mk);});
+  return t;
+}
+function renderTrack(){
+  const key=curMonth;
+  const rec=state.actualsByMonth[key]||{};
+  const ccActual=ACTUALS.ccByMonth[key];
+  let h=monthNav();
+  h+=`<div class="mini" style="margin-bottom:12px;">The <b>Plan</b> box is per-month — set income & budgets just for ${new Date(key+'-01T00:00').toLocaleString('en',{month:'long'})} (blank = your default). Take-home auto-fills from imported paychecks. Card total from statements ${ccActual!=null?`was <b>${fmt(ccActual)}</b>`:'is not on file for this month'}.</div>`;
+  const incS=trackSection('income','💵 Income (take-home)','sec-income',key,rec,'income');
+  h+=incS.html;
+  const monthIncome=incomeForMonth(key);
+  const titles={wisconsin:'🏡 Home 1',seattle:'🏖️ Home 2 (seasonal)',fixed:'Other Fixed / Essential',flex:'Flexible / Lifestyle',save:'Savings & Goals'};
+  const clses={wisconsin:'sec-fixed',seattle:'sec-fixed',fixed:'sec-fixed',flex:'sec-flex',save:'sec-save'};
+  let totAct=0;
+  SPEND_SECS.forEach(sec=>{const s=trackSection(sec,titles[sec],clses[sec],key,rec);h+=s.html;totAct+=s.act;});
+  const totPlan=planOutForMonth(key);
+  h+=`<div class="leftover"><div><div class="mini">Take-home spending vs plan this month</div>
+     <div class="big ${totAct<=totPlan?'pos':'neg'}">${fmt(totAct)} <span class="mini">of ${fmt(totPlan)} planned</span></div></div>
+     <div class="mini" style="text-align:right;">Take-home income ${fmt(monthIncome)}<br>${monthIncome-totAct>=0?'Left this month: <b>'+fmt(monthIncome-totAct)+'</b>':'Overspent: <b>'+fmt(totAct-monthIncome)+'</b>'}</div></div>`;
+  if((state.plan.payroll||[]).length){
+    const p=trackSection('payroll','🏦 Pre-tax payroll (deducted before take-home)','sec-payroll',key,rec);
+    h+=p.html;
+    h+=`<div class="mini" style="margin:-4px 4px 4px;text-align:right;">These come out of your paycheck <b>before</b> take-home — funded from gross (~${fmt(monthIncome+p.act)}/mo), so they're kept out of the take-home total above.</div>`;
+  }
+  document.getElementById('main').innerHTML=h;
+}
+function monthNav(){
+  const [y,m]=curMonth.split('-').map(Number);
+  const label=new Date(y,m-1,1).toLocaleString('en',{month:'long',year:'numeric'});
+  return `<div class="month-nav"><button onclick="shiftMonth(-1)">‹</button><div class="mtitle">${label}</div><button onclick="shiftMonth(1)">›</button></div>`;
+}
+function shiftMonth(d){let[y,m]=curMonth.split('-').map(Number);m+=d;if(m<1){m=12;y--;}if(m>12){m=1;y++;}curMonth=`${y}-${String(m).padStart(2,'0')}`;renderTrack();}
+function editActual(key,id,v){state.actualsByMonth[key]=state.actualsByMonth[key]||{};if(v==='')delete state.actualsByMonth[key][id];else state.actualsByMonth[key][id]=parseFloat(v)||0;save();renderTrack();}
+// Expandable per-category transaction detail (click a category with a count to see what's in it).
+let expandedLine=null;
+function toggleTxnDetail(id){expandedLine=(expandedLine===id?null:id);renderTrack();}
+function removeOneTxn(ts,amt,id,key){
+  const list=state.txns||[];
+  const hit=list.map((t,i)=>({t,i})).reverse().find(o=>o.t.ts===ts&&o.t.amt===amt&&o.t.id===id);
+  if(hit)list.splice(hit.i,1);
+  const rec=state.actualsByMonth[key];
+  if(rec&&rec[id]!=null){const nv=Math.round((Number(rec[id])-amt)*100)/100;if(nv>0.005)rec[id]=nv;else delete rec[id];}
+  save();renderTrack();
+}
+// ---- Tap-to-move a transaction to another category (optionally learning the rule) ----
+// Move amt from one line's monthly actual to another (handles negative refund amounts too).
+function moveActual(mk,fromId,toId,amt){
+  const rec=state.actualsByMonth[mk];if(!rec)return;
+  if(rec[fromId]!=null){const nv=Math.round((Number(rec[fromId])-amt)*100)/100;if(Math.abs(nv)>0.005)rec[fromId]=nv;else delete rec[fromId];}
+  rec[toId]=Math.round(((Number(rec[toId])||0)+amt)*100)/100;
+}
+// Re-sort every imported txn whose merchant matches ruleKey into toId. Returns how many moved.
+function applyRuleRetro(ruleKey,toId){
+  let n=0;
+  (state.txns||[]).forEach(t=>{
+    if(t.src!=='csv'&&t.src!=='email')return;
+    if(/^income:|^payroll:/.test(t.id)||t.id===toId)return;
+    if(merchantKey(t.note)!==ruleKey)return;
+    moveActual(monthKeyOf(t.date),t.id,toId,t.amt);t.id=toId;n++;
+  });
+  return n;
+}
+let moveCtx=null;
+function openMoveModal(ts,amt,fromId,key){
+  const t=(state.txns||[]).find(x=>x.ts===ts&&x.amt===amt&&x.id===fromId&&monthKeyOf(x.date)===key);
+  if(!t)return;
+  moveCtx={ts,amt,fromId,key,note:t.note||''};
+  document.getElementById('mv_cat').innerHTML=planLineOptions().map(o=>`<option value="${o.id}"${o.id===fromId?' selected':''}>${esc(o.label)}</option>`).join('');
+  document.getElementById('mv_merchant').textContent=merchantKey(t.note)||'this merchant';
+  document.getElementById('mv_remember').checked=true;
+  document.getElementById('mvOverlay').classList.add('show');
+}
+function closeMoveModal(){document.getElementById('mvOverlay').classList.remove('show');moveCtx=null;}
+function applyMove(){
+  if(!moveCtx)return;
+  const toId=document.getElementById('mv_cat').value;
+  const remember=document.getElementById('mv_remember').checked;
+  const note=moveCtx.note;
+  const t=(state.txns||[]).find(x=>x.ts===moveCtx.ts&&x.amt===moveCtx.amt&&x.id===moveCtx.fromId&&monthKeyOf(x.date)===moveCtx.key);
+  if(t&&toId!==t.id){moveActual(monthKeyOf(t.date),t.id,toId,t.amt);t.id=toId;}
+  // applyRuleRetro moves every OTHER matching txn into toId (the one just moved is already there).
+  let others=0,ruleKey='';
+  if(remember){ruleKey=merchantKey(note);if(ruleKey){state.catRules=state.catRules||{};state.catRules[ruleKey]=toId;others=applyRuleRetro(ruleKey,toId);}}
+  const toLabel=(planLineOptions().find(o=>o.id===toId)||{}).label||toId;
+  save();closeMoveModal();renderTrack();
+  if(remember&&ruleKey){setTimeout(()=>alert(`Learned: "${ruleKey}" → ${toLabel}.\nFuture matches auto-categorize here`+(others?`, and ${others} past transaction${others!==1?'s':''} moved too.`:'.')),40);}
+}
+
+function renderHistory(){
+  const months=Object.keys(state.actualsByMonth||{}).sort().slice(-12);   // last 12 months (income/paycheck data rarely reaches further back)
+  if(!months.length){document.getElementById('main').innerHTML='<div class="mini">No imported data yet. Import your bank/card CSVs and paychecks — this fills in automatically.</div>';return;}
+  const spendOf=mk=>{let t=0;SPEND_SECS.forEach(sec=>(state.plan[sec]||[]).forEach((it,i)=>{const v=(state.actualsByMonth[mk]||{})[sec+':'+i];if(v!=null&&v!=='')t+=Number(v)||0;}));return t;};
+  const incOf=mk=>{let t=0;(state.plan.income||[]).forEach((it,i)=>{const v=(state.actualsByMonth[mk]||{})['income:'+i];if(v!=null&&v!=='')t+=Number(v)||0;});return t;};
+  const retId=payrollLineIds(state).ret;
+  const retOf=mk=>{const v=(state.actualsByMonth[mk]||{})[retId];return v!=null?Number(v)||0:0;};
+  let h=`<div class="mini" style="margin-bottom:12px;">Built from your <b>imported transactions & paychecks</b> (not hardcoded). <b>Income</b> = actual take-home received that month; <b>Spending</b> = take-home spending (excludes card payments, transfers & pre-tax payroll); <b>Retirement</b> = 403b+Roth+WRS withheld. Biweekly pay makes some months 2- vs 3-check, so rows swing — the <b>Avg</b> row is the steady picture.</div>`;
+  h+=`<table class="hist"><thead><tr><th>Month</th><th>Income</th><th>Spending</th><th>Net</th><th>Retirement</th></tr></thead><tbody>`;
+  const now=new Date(); const nowMonth=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  let ti=0,ts=0,tr=0,nAvg=0;
+  months.forEach(mk=>{const inc=incOf(mk),sp=spendOf(mk),rt=retOf(mk);
+    const partial=(mk>=nowMonth);   // current/future month = still in progress → excluded from the average
+    if(!partial){ti+=inc;ts+=sp;tr+=rt;nAvg++;}
+    const parts=mk.split('-');const lbl=new Date(parts[0],parts[1]-1,1).toLocaleString('en',{month:'short',year:'2-digit'})+(partial?' *':'');
+    h+=`<tr${partial?' style="opacity:.55"':''}><td>${lbl}</td><td>${fmt(inc)}</td><td>${fmt(sp)}</td><td style="color:${inc-sp>=0?'var(--income)':'var(--red)'}">${fmt(inc-sp)}</td><td>${fmt(rt)}</td></tr>`;});
+  const n=nAvg||months.length;
+  h+=`<tr><td>Avg / mo</td><td>${fmt(ti/n)}</td><td>${fmt(ts/n)}</td><td>${fmt((ti-ts)/n)}</td><td>${fmt(tr/n)}</td></tr>`;
+  h+=`</tbody></table>`;
+  h+=`<div class="mini" style="margin-top:14px;">⚠️ Last 12 months only. <b>Income</b> comes from paychecks, which usually go back ~1 year, while card/checking exports go back ~2 years — so a month reads low on income if its paychecks weren't imported. Import each earner's paychecks for every month you want a true net. <b>*</b> = current in-progress month (paycheck not in yet), excluded from the Avg.</div>`;
+  document.getElementById('main').innerHTML=h;
+}
+
+function renderAdvice(){
+  const inc=planIncome()||(ACTUALS.avgNetPay+ACTUALS.avgJPay);
+  const fx=planHousing()+sumSec('fixed'),fl=sumSec('flex'),sv=sumSec('save');
+  // retirement is withheld before take-home, so include it in savings and in the gross base
+  const gross=inc+AUTO_RETIREMENT;
+  const needs=fx, wants=fl, saves=sv+AUTO_RETIREMENT;
+  const pctN=Math.round(needs/gross*100),pctW=Math.round(wants/gross*100),pctS=Math.round(saves/gross*100);
+  function badge(actual,lo,hi){if(actual>=lo&&actual<=hi)return '<span class="badge good">on target</span>';if(actual<lo)return '<span class="badge warn">below</span>';return '<span class="badge bad">high</span>';}
+  const hasHistory=Object.keys(ACTUALS.netPayByMonth||{}).length>0;
+  document.getElementById('main').innerHTML=`
+  ${hasHistory?`<div class="advice-card">
+    <h3>Your financial snapshot (from imported statements)</h3>
+    <p>• <b>Household take-home pay</b> averaged <b>${fmt(ACTUALS.avgNetPay+ACTUALS.avgJPay)}/mo</b> across your income sources. Budget against the <b>average</b>, and treat the high months as chances to top up savings.</p>
+    <p>• <b>Card spending</b> ran a median of <b>${fmt(ACTUALS.medianCC)}/mo</b> (avg ${fmt(ACTUALS.avgCC)}).</p>
+    <p>• <b>Retirement</b> — you contribute <b>~${fmt(ACTUALS.avgRetire)}/mo</b> of your own money, plus any employer match (~${fmt(EMPLOYER_RETIREMENT)}/mo) is real retirement money on top, just not counted as your own saving.</p>
+  </div>`:''}
+  <div class="advice-card">
+    <h3>The 50 / 30 / 20 framework — how you compare</h3>
+    <p class="mini">A common professional guideline: ~50% of take-home to <b>needs</b>, ~30% to <b>wants</b>, ~20% to <b>savings</b>. Your current plan:</p>
+    <div class="rule"><div style="width:80px">Needs ${pctN}%</div><div class="rbar"><i style="width:${Math.min(pctN,100)}%;background:var(--spend)"></i></div>${badge(pctN,40,55)}</div>
+    <div class="rule"><div style="width:80px">Wants ${pctW}%</div><div class="rbar"><i style="width:${Math.min(pctW,100)}%;background:var(--amber)"></i></div>${badge(pctW,20,35)}</div>
+    <div class="rule"><div style="width:80px">Save ${pctS}%</div><div class="rbar"><i style="width:${Math.min(pctS,100)}%;background:var(--save)"></i></div>${badge(pctS,20,100)}</div>
+    <p class="mini">Percentages are of your ~${fmt(gross)}/mo base (take-home ${fmt(inc)} + ${fmt(AUTO_RETIREMENT)} your retirement contribution, withheld before pay). Your total savings rate here is <b>~${Math.round(saves/gross*100)}%</b> — any employer match (~${fmt(EMPLOYER_RETIREMENT)}/mo) is on top of this and not included.</p>
+  </div>
+  <div class="advice-card">
+    <h3>Recommended actions</h3>
+    <p><b>1. Build a 3–6 month emergency fund.</b> Your essential costs are ~${fmt(fx)}/mo, so target <b>${fmt(fx*3)}–${fmt(fx*6)}</b> in a high-yield savings account.</p>
+    <p><b>2. Smooth lumpy income.</b> If your pay varies month to month, park surplus from high months to cover lean ones.</p>
+    <p><b>3. Raise retirement contributions when cash flow allows.</b> Even small increases compound significantly over time.</p>
+    <p><b>4. Zero out seasonal lines when not in use.</b> If a housing or income line is only active part of the year, set it to $0 the rest of the time so your plan reflects reality.</p>
+    <p class="mini">This is general educational guidance based on your own plan and statements, not personalized investment or tax advice.</p>
+  </div>`;
+}
+
+function resetPlan(){if(confirm('Reset the budget plan to the recommended baseline? Your tracked actuals are kept.')){state.plan=recommendedPlan();save();render();}}
+function exportData(){const b=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='budget-backup.json';a.click();}
+function importData(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const p=JSON.parse(r.result);if(!p.plan)throw 0;state=p;save();render();alert('Imported.');}catch(err){alert('Invalid file.');}};r.readAsText(f);}
+
+document.querySelectorAll('#viewSeg button').forEach(b=>b.onclick=()=>{view=b.dataset.v;render();});
+document.getElementById('qaOverlay').addEventListener('click',e=>{if(e.target.id==='qaOverlay')closeQuickAdd();});
+document.getElementById('mvOverlay').addEventListener('click',e=>{if(e.target.id==='mvOverlay')closeMoveModal();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeQuickAdd();closeMoveModal();}});
+initSync();
+</script>
+</body>
+</html>
